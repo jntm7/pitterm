@@ -39,3 +39,18 @@
 
 # debug information files
 *.dwo
+
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.cache/
+
+# vcpkg
+vcpkg_installed/
