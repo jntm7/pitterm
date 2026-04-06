@@ -2,6 +2,8 @@
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 
+#include "data/models.hpp"
+
 int main() {
     using namespace ftxui;
 
