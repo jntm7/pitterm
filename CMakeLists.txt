@@ -29,6 +29,11 @@ FetchContent_MakeAvailable(ftxui json httplib)
 
 add_executable(pitterm
     src/main.cpp
+    src/data/openf1_client.cpp
+)
+
+target_include_directories(pitterm PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/_deps/httplib-src
 )
 
 target_link_libraries(pitterm PRIVATE
@@ -36,7 +41,6 @@ target_link_libraries(pitterm PRIVATE
     ftxui::dom
     ftxui::component
     nlohmann_json::nlohmann_json
-    httplib::httplib
 )
 
 if(MSVC)
