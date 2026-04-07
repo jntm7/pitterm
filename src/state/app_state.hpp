@@ -21,7 +21,7 @@ enum class Tab {
 // Central state for the entire app
 class AppState {
 public:
-    Tab current_tab = Tab::Seasons;
+    int selected_tab_index = 0;
     SessionContext context;
     Cache cache;
 
