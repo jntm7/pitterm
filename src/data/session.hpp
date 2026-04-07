@@ -5,6 +5,7 @@
 
 namespace pitterm::data {
 
+// Practice, Qualifying, Sprint, or Race session
 struct Session {
     int session_key;
     int meeting_key;

@@ -5,6 +5,7 @@
 
 namespace pitterm::data {
 
+// F1 driver info (number, name, team)
 struct Driver {
     int driver_number;
     std::string full_name;

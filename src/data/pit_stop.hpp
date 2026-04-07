@@ -6,6 +6,7 @@
 
 namespace pitterm::data {
 
+// Pit lane timing and stop duration
 struct PitStop {
     int driver_number;
     int session_key;

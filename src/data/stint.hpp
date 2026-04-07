@@ -5,6 +5,7 @@
 
 namespace pitterm::data {
 
+// Continuous driving period on one tyre compound
 struct Stint {
     int stint_number;
     int driver_number;

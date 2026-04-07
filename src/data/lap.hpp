@@ -7,6 +7,7 @@
 
 namespace pitterm::data {
 
+// Single lap with timing and sector data
 struct Lap {
     int lap_number;
     int driver_number;

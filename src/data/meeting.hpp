@@ -5,6 +5,7 @@
 
 namespace pitterm::data {
 
+// Grand Prix weekend (e.g., "Monaco Grand Prix 2024")
 struct Meeting {
     int meeting_key;
     std::string meeting_name;

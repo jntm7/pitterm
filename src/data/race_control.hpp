@@ -6,6 +6,7 @@
 
 namespace pitterm::data {
 
+// Flags, safety car, incidents, session status
 struct RaceControl {
     int session_key;
     int meeting_key;

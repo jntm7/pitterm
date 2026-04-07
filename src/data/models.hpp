@@ -1,5 +1,6 @@
 #pragma once
 
+// Re-exports all models and provides vector aliases
 #include "meeting.hpp"
 #include "session.hpp"
 #include "driver.hpp"
