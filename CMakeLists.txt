@@ -30,6 +30,11 @@ FetchContent_MakeAvailable(ftxui json httplib)
 add_executable(pitterm
     src/main.cpp
     src/data/openf1_client.cpp
+    src/ui/app.cpp
+    src/ui/tabs/seasons.cpp
+    src/ui/tabs/races.cpp
+    src/ui/tabs/sessions.cpp
+    src/ui/tabs/data.cpp
 )
 
 target_include_directories(pitterm PRIVATE
