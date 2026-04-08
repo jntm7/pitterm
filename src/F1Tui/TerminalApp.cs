@@ -35,23 +35,18 @@ public sealed class TerminalApp
             options.Value.CacheTtlMinutes);
 
         var seasons = await seasonService.GetSeasonsAsync(cancellationToken);
-        var initialSeason = seasons.FirstOrDefault()?.Year;
 
-        if (initialSeason is not null)
+        stateStore.Update(state => state with
         {
-            stateStore.Update(state => state with
-            {
-                SelectedSeason = initialSeason,
-                SelectedGrandPrixName = null,
-                StatusMessage = BuildStatusMessage(initialSeason, null)
-            });
-        }
+            SelectedSeason = null,
+            ActiveScreen = "Seasons",
+            StatusMessage = BuildSeasonsStatusMessage(null)
+        });
 
         logger.LogInformation(
-            "Initial app state: screen={Screen}, season={Season}, grandPrix={GrandPrix}",
+            "Initial app state: screen={Screen}, season={Season}",
             stateStore.Current.ActiveScreen,
-            stateStore.Current.SelectedSeason,
-            stateStore.Current.SelectedGrandPrixName ?? "n/a");
+            stateStore.Current.SelectedSeason);
 
         var seasonNames = seasons.Select(season => season.Year.ToString()).ToList();
 
@@ -84,14 +79,37 @@ public sealed class TerminalApp
             Y = 1
         };
 
-        var listView = new ListView(seasonNames)
+        var seasonListView = new ListView(seasonNames)
         {
             X = 1,
             Y = Pos.Bottom(title) + 1,
             Width = 30,
             Height = Dim.Fill() - 3
         };
-        listView.ColorScheme = darkScheme;
+        seasonListView.ColorScheme = darkScheme;
+
+        var raceRows = new List<string>();
+        var sessionRows = new List<string>();
+
+        var raceListView = new ListView(raceRows)
+        {
+            X = 1,
+            Y = Pos.Bottom(title) + 1,
+            Width = Dim.Fill() - 2,
+            Height = Dim.Fill() - 3,
+            Visible = false
+        };
+        raceListView.ColorScheme = darkScheme;
+
+        var sessionListView = new ListView(sessionRows)
+        {
+            X = 1,
+            Y = Pos.Bottom(title) + 1,
+            Width = Dim.Fill() - 2,
+            Height = Dim.Fill() - 3,
+            Visible = false
+        };
+        sessionListView.ColorScheme = darkScheme;
 
         var statusLine = new Label(stateStore.Current.StatusMessage ?? "Ready")
         {
@@ -102,7 +120,7 @@ public sealed class TerminalApp
         };
         statusLine.ColorScheme = darkScheme;
 
-        var shortcutsLine = new Label("[Q] Quit")
+        var shortcutsLine = new Label("[Enter] Select  [Esc] Back  [Q] Quit")
         {
             X = 1,
             Y = Pos.AnchorEnd(1),
@@ -129,43 +147,227 @@ public sealed class TerminalApp
             }
         };
 
-        listView.KeyPress += args =>
+        seasonListView.KeyPress += args =>
         {
             if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
             {
                 args.Handled = true;
                 Application.RequestStop();
             }
+
+            if (args.KeyEvent.Key == Key.Enter)
+            {
+                args.Handled = true;
+                var selectedSeason = seasons[seasonListView.SelectedItem].Year;
+                raceRows = BuildRaceRows(selectedSeason);
+                raceListView.SetSource(raceRows);
+                seasonListView.Visible = false;
+                raceListView.Visible = true;
+                title.Text = $"Races - {selectedSeason}";
+
+                stateStore.Update(state => state with
+                {
+                    SelectedSeason = selectedSeason,
+                    ActiveScreen = "Races",
+                    StatusMessage = BuildRaceStatusMessage(selectedSeason, null)
+                });
+
+                statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+                raceListView.SetFocus();
+            }
         };
 
-        listView.SelectedItemChanged += args =>
+        raceListView.KeyPress += args =>
+        {
+            if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
+            {
+                args.Handled = true;
+                Application.RequestStop();
+            }
+
+            if (args.KeyEvent.Key == Key.Esc)
+            {
+                args.Handled = true;
+
+                raceListView.Visible = false;
+                sessionListView.Visible = false;
+                seasonListView.Visible = true;
+                title.Text = "F1 Seasons";
+
+                stateStore.Update(state => state with
+                {
+                    ActiveScreen = "Seasons",
+                    StatusMessage = BuildSeasonsStatusMessage(state.SelectedSeason)
+                });
+
+                statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+                seasonListView.SetFocus();
+            }
+
+            if (args.KeyEvent.Key == Key.Enter)
+            {
+                args.Handled = true;
+
+                if (raceListView.SelectedItem < 0 || raceListView.SelectedItem >= raceRows.Count)
+                {
+                    return;
+                }
+
+                var selectedEntry = raceRows[raceListView.SelectedItem];
+                sessionRows = BuildSessionRows(selectedEntry);
+                sessionListView.SetSource(sessionRows);
+
+                seasonListView.Visible = false;
+                raceListView.Visible = false;
+                sessionListView.Visible = true;
+                title.Text = "Sessions";
+
+                stateStore.Update(state => state with
+                {
+                    ActiveScreen = "Sessions",
+                    StatusMessage = BuildSessionsStatusMessage(state.SelectedSeason, selectedEntry, null)
+                });
+
+                statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+                sessionListView.SetFocus();
+            }
+        };
+
+        sessionListView.KeyPress += args =>
+        {
+            if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
+            {
+                args.Handled = true;
+                Application.RequestStop();
+            }
+
+            if (args.KeyEvent.Key == Key.Esc)
+            {
+                args.Handled = true;
+
+                sessionListView.Visible = false;
+                raceListView.Visible = true;
+                seasonListView.Visible = false;
+                title.Text = $"Races - {stateStore.Current.SelectedSeason?.ToString() ?? "n/a"}";
+
+                stateStore.Update(state => state with
+                {
+                    ActiveScreen = "Races",
+                    StatusMessage = BuildRaceStatusMessage(state.SelectedSeason, null)
+                });
+
+                statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+                raceListView.SetFocus();
+            }
+        };
+
+        seasonListView.SelectedItemChanged += args =>
         {
             var selectedSeason = seasons[args.Item].Year;
 
             stateStore.Update(state => state with
             {
                 SelectedSeason = selectedSeason,
-                SelectedGrandPrixName = null,
-                StatusMessage = BuildStatusMessage(selectedSeason, null)
+                ActiveScreen = "Seasons",
+                StatusMessage = BuildSeasonsStatusMessage(selectedSeason)
             });
 
             statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
         };
 
-        window.Add(title, listView, statusLine, shortcutsLine);
+        raceListView.SelectedItemChanged += args =>
+        {
+            if (stateStore.Current.SelectedSeason is null)
+            {
+                return;
+            }
+
+            if (args.Item < 0 || args.Item >= raceRows.Count)
+            {
+                return;
+            }
+
+            var selectedEntry = raceRows[args.Item];
+
+            stateStore.Update(state => state with
+            {
+                StatusMessage = BuildRaceStatusMessage(state.SelectedSeason, selectedEntry)
+            });
+
+            statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+        };
+
+        sessionListView.SelectedItemChanged += args =>
+        {
+            if (args.Item < 0 || args.Item >= sessionRows.Count)
+            {
+                return;
+            }
+
+            var selectedSession = sessionRows[args.Item];
+            var selectedRace = raceListView.SelectedItem >= 0 && raceListView.SelectedItem < raceRows.Count
+                ? raceRows[raceListView.SelectedItem]
+                : null;
+
+            stateStore.Update(state => state with
+            {
+                StatusMessage = BuildSessionsStatusMessage(state.SelectedSeason, selectedRace, selectedSession)
+            });
+
+            statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+        };
+
+        window.Add(title, seasonListView, raceListView, sessionListView, statusLine, shortcutsLine);
         top.Add(window);
 
         Application.Run();
         Application.Shutdown();
     }
 
-    private string BuildStatusMessage(int? selectedSeason, string? selectedGrandPrixName)
+    private string BuildSeasonsStatusMessage(int? selectedSeason)
     {
-        var grandPrixName = string.IsNullOrWhiteSpace(selectedGrandPrixName)
-            ? "n/a"
-            : selectedGrandPrixName;
+        if (selectedSeason is null)
+        {
+            return $"Season: none selected | Data: {options.Value.ApiBaseUrl}";
+        }
 
-        return $"Season {selectedSeason?.ToString() ?? "none"} | Grand Prix: {grandPrixName} |  Data: {options.Value.ApiBaseUrl}";
+        return $"Season {selectedSeason} selected | Data: {options.Value.ApiBaseUrl}";
+    }
+
+    private string BuildRaceStatusMessage(int? selectedSeason, string? selectedRaceEntry)
+    {
+        var grandPrix = string.IsNullOrWhiteSpace(selectedRaceEntry) ? "select a race" : selectedRaceEntry;
+        return $"Season {selectedSeason?.ToString() ?? "none"} | Grand Prix: {grandPrix} | Data: {options.Value.ApiBaseUrl}";
+    }
+
+    private string BuildSessionsStatusMessage(int? selectedSeason, string? selectedRaceEntry, string? selectedSession)
+    {
+        var grandPrix = string.IsNullOrWhiteSpace(selectedRaceEntry) ? "n/a" : selectedRaceEntry;
+        var sessionName = string.IsNullOrWhiteSpace(selectedSession) ? "select a session" : selectedSession;
+        return $"Season {selectedSeason?.ToString() ?? "none"} | Grand Prix: {grandPrix} | Session: {sessionName} | Data: {options.Value.ApiBaseUrl}";
+    }
+
+    private static List<string> BuildRaceRows(int season)
+    {
+        return new List<string>
+        {
+            $"R1  Bahrain Grand Prix ({season})",
+            $"R2  Saudi Arabian Grand Prix ({season})",
+            $"R3  Australian Grand Prix ({season})",
+            $"R4  Japanese Grand Prix ({season})"
+        };
+    }
+
+    private static List<string> BuildSessionRows(string raceEntry)
+    {
+        return new List<string>
+        {
+            $"Practice 1 - {raceEntry}",
+            $"Practice 2 - {raceEntry}",
+            $"Practice 3 - {raceEntry}",
+            $"Qualifying - {raceEntry}",
+            $"Race - {raceEntry}"
+        };
     }
 
     private static bool ShouldQuit(Key key, int keyValue)
