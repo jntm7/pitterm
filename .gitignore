@@ -45,6 +45,16 @@ build/
 cmake-build-*/
 out/
 
+# .NET build artifacts
+bin/
+obj/
+.vs/
+TestResults/
+
+# User-specific IDE settings
+*.user
+*.suo
+
 # IDE/Editor
 .vscode/
 .idea/

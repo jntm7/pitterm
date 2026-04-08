@@ -1,25 +1,35 @@
 # PitTerm
 
-TUI-based F1 Historical Data Viewer using OpenF1 API.
+Cross-platform F1 historical statistics TUI built with C# and .NET.
 
 ## Prerequisites
 
-- C++20 compiler
-- CMake 3.20+
-- Git (for fetching dependencies)
+- .NET SDK 10.0+
+- A modern terminal emulator (kitty, alacritty, Windows Terminal, iTerm2)
 
-## Build
+## Project Structure
+
+- `src/F1Tui` - interactive terminal UI app
+- `src/F1.Core` - domain models and application interfaces
+- `src/F1.Infrastructure` - API clients and persistence adapters
+- `tests/F1.Core.Tests` - unit tests for core logic
+- `tests/F1.Infrastructure.Tests` - infrastructure tests
+
+## Setup
 
 ```bash
-cmake -B build
-cmake --build build -j$(nproc)  # Linux
-cmake --build build -j$(sysctl -n hw.ncpu)  # macOS
+dotnet restore
+dotnet build
 ```
 
 ## Run
 
 ```bash
-./build/pitterm
+dotnet run --project src/F1Tui/F1Tui.csproj
 ```
 
-Press `Ctrl+C` to exit.
+## Test
+
+```bash
+dotnet test
+```
