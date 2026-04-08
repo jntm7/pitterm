@@ -42,7 +42,7 @@ public sealed class TerminalApp
             stateStore.Update(state => state with
             {
                 SelectedSeason = initialSeason,
-                StatusMessage = $"Loaded {seasons.Count} seasons"
+                StatusMessage = BuildStatusMessage(seasons.Count, initialSeason)
             });
         }
 
@@ -85,13 +85,39 @@ public sealed class TerminalApp
             X = 1,
             Y = Pos.Bottom(title) + 1,
             Width = 30,
-            Height = Dim.Fill() - 1
+            Height = Dim.Fill() - 2
         };
 
-        window.Add(title, listView);
+        var statusBar = new Label(stateStore.Current.StatusMessage ?? "Ready")
+        {
+            X = 1,
+            Y = Pos.AnchorEnd(1),
+            Width = Dim.Fill() - 2,
+            Height = 1
+        };
+
+        listView.SelectedItemChanged += args =>
+        {
+            var selectedSeason = seasons[args.Item].Year;
+
+            stateStore.Update(state => state with
+            {
+                SelectedSeason = selectedSeason,
+                StatusMessage = BuildStatusMessage(seasons.Count, selectedSeason)
+            });
+
+            statusBar.Text = stateStore.Current.StatusMessage ?? "Ready";
+        };
+
+        window.Add(title, listView, statusBar);
         top.Add(menu, window);
 
         Application.Run();
         Application.Shutdown();
+    }
+
+    private string BuildStatusMessage(int seasonCount, int? selectedSeason)
+    {
+        return $"Loaded {seasonCount} seasons | Selected {selectedSeason?.ToString() ?? "none"} | API {options.Value.ApiBaseUrl} | Timeout {options.Value.RequestTimeoutSeconds}s | Cache {options.Value.CacheTtlMinutes}m";
     }
 }
