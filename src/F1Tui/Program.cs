@@ -1,15 +1,17 @@
+using F1Tui.Configuration;
 using F1Tui.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-var environmentName = Environment.GetEnvironmentVariable("PITTERM_ENVIRONMENT") ?? "Production";
+var environmentName = Environment.GetEnvironmentVariable(StartupKeys.EnvironmentVariableName)
+    ?? StartupKeys.ProductionEnvironmentName;
 var configuration = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
     .AddJsonFile($"appsettings.{environmentName}.json", optional: true, reloadOnChange: false)
-    .AddEnvironmentVariables(prefix: "PITTERM_")
+    .AddEnvironmentVariables(prefix: StartupKeys.EnvironmentVariablesPrefix)
     .Build();
 
 var serviceCollection = new ServiceCollection();
