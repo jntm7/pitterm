@@ -42,16 +42,16 @@ public sealed class TerminalApp
             stateStore.Update(state => state with
             {
                 SelectedSeason = initialSeason,
-                SelectedRound = 1,
+                SelectedGrandPrixName = null,
                 StatusMessage = BuildStatusMessage(initialSeason, null)
             });
         }
 
         logger.LogInformation(
-            "Initial app state: screen={Screen}, season={Season}, round={Round}",
+            "Initial app state: screen={Screen}, season={Season}, grandPrix={GrandPrix}",
             stateStore.Current.ActiveScreen,
             stateStore.Current.SelectedSeason,
-            stateStore.Current.SelectedRound);
+            stateStore.Current.SelectedGrandPrixName ?? "n/a");
 
         var seasonNames = seasons.Select(season => season.Year.ToString()).ToList();
 
@@ -145,7 +145,7 @@ public sealed class TerminalApp
             stateStore.Update(state => state with
             {
                 SelectedSeason = selectedSeason,
-                SelectedRound = 1,
+                SelectedGrandPrixName = null,
                 StatusMessage = BuildStatusMessage(selectedSeason, null)
             });
 

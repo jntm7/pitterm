@@ -13,12 +13,12 @@ public sealed class InMemoryAppStateStoreTests
         store.Update(state => state with
         {
             SelectedSeason = 2025,
-            SelectedRound = 5,
+            SelectedGrandPrixName = "Australian Grand Prix",
             StatusMessage = "Loaded 10 seasons"
         });
 
         Assert.Equal(2025, store.Current.SelectedSeason);
-        Assert.Equal(5, store.Current.SelectedRound);
+        Assert.Equal("Australian Grand Prix", store.Current.SelectedGrandPrixName);
         Assert.Equal("Loaded 10 seasons", store.Current.StatusMessage);
     }
 }
