@@ -28,6 +28,8 @@ dotnet build
 dotnet run --project src/F1Tui/F1Tui.csproj
 ```
 
+Use `PITTERM_ENVIRONMENT=Development` to load `appsettings.Development.json`.
+
 ## Test
 
 ```bash
