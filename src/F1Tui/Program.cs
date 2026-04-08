@@ -1,3 +1,4 @@
+using F1Tui;
 using F1Tui.Configuration;
 using F1Tui.DependencyInjection;
 using Microsoft.Extensions.Configuration;

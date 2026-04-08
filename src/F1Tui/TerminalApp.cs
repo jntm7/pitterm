@@ -42,7 +42,8 @@ public sealed class TerminalApp
             stateStore.Update(state => state with
             {
                 SelectedSeason = initialSeason,
-                StatusMessage = BuildStatusMessage(seasons.Count, initialSeason)
+                SelectedRound = 1,
+                StatusMessage = BuildStatusMessage(initialSeason, null)
             });
         }
 
@@ -56,23 +57,26 @@ public sealed class TerminalApp
 
         Application.Init();
 
+        var darkScheme = new ColorScheme
+        {
+            Normal = Application.Driver.MakeAttribute(Color.Gray, Color.Black),
+            Focus = Application.Driver.MakeAttribute(Color.Black, Color.Gray),
+            HotNormal = Application.Driver.MakeAttribute(Color.BrightYellow, Color.Black),
+            HotFocus = Application.Driver.MakeAttribute(Color.BrightYellow, Color.Gray),
+            Disabled = Application.Driver.MakeAttribute(Color.DarkGray, Color.Black)
+        };
+
         var top = Application.Top;
-        var menu = new MenuBar(
-            new MenuBarItem[]
-            {
-                new("_File", new MenuItem[]
-                {
-                    new("_Quit", string.Empty, () => Application.RequestStop())
-                })
-            });
+        top.ColorScheme = darkScheme;
 
         var window = new Window("PitTerm")
         {
             X = 0,
-            Y = 1,
+            Y = 0,
             Width = Dim.Fill(),
             Height = Dim.Fill()
         };
+        window.ColorScheme = darkScheme;
 
         var title = new Label("F1 Seasons")
         {
@@ -85,15 +89,53 @@ public sealed class TerminalApp
             X = 1,
             Y = Pos.Bottom(title) + 1,
             Width = 30,
-            Height = Dim.Fill() - 2
+            Height = Dim.Fill() - 3
         };
+        listView.ColorScheme = darkScheme;
 
-        var statusBar = new Label(stateStore.Current.StatusMessage ?? "Ready")
+        var statusLine = new Label(stateStore.Current.StatusMessage ?? "Ready")
+        {
+            X = 1,
+            Y = Pos.AnchorEnd(2),
+            Width = Dim.Fill() - 2,
+            Height = 1
+        };
+        statusLine.ColorScheme = darkScheme;
+
+        var shortcutsLine = new Label("[Q] Quit")
         {
             X = 1,
             Y = Pos.AnchorEnd(1),
             Width = Dim.Fill() - 2,
             Height = 1
+        };
+        shortcutsLine.ColorScheme = darkScheme;
+
+        top.KeyPress += args =>
+        {
+            if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
+            {
+                args.Handled = true;
+                Application.RequestStop();
+            }
+        };
+
+        window.KeyPress += args =>
+        {
+            if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
+            {
+                args.Handled = true;
+                Application.RequestStop();
+            }
+        };
+
+        listView.KeyPress += args =>
+        {
+            if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
+            {
+                args.Handled = true;
+                Application.RequestStop();
+            }
         };
 
         listView.SelectedItemChanged += args =>
@@ -103,21 +145,37 @@ public sealed class TerminalApp
             stateStore.Update(state => state with
             {
                 SelectedSeason = selectedSeason,
-                StatusMessage = BuildStatusMessage(seasons.Count, selectedSeason)
+                SelectedRound = 1,
+                StatusMessage = BuildStatusMessage(selectedSeason, null)
             });
 
-            statusBar.Text = stateStore.Current.StatusMessage ?? "Ready";
+            statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
         };
 
-        window.Add(title, listView, statusBar);
-        top.Add(menu, window);
+        window.Add(title, listView, statusLine, shortcutsLine);
+        top.Add(window);
 
         Application.Run();
         Application.Shutdown();
     }
 
-    private string BuildStatusMessage(int seasonCount, int? selectedSeason)
+    private string BuildStatusMessage(int? selectedSeason, string? selectedGrandPrixName)
     {
-        return $"Loaded {seasonCount} seasons | Selected {selectedSeason?.ToString() ?? "none"} | API {options.Value.ApiBaseUrl} | Timeout {options.Value.RequestTimeoutSeconds}s | Cache {options.Value.CacheTtlMinutes}m";
+        var grandPrixName = string.IsNullOrWhiteSpace(selectedGrandPrixName)
+            ? "n/a"
+            : selectedGrandPrixName;
+
+        return $"Season {selectedSeason?.ToString() ?? "none"} | Grand Prix: {grandPrixName} |  Data: {options.Value.ApiBaseUrl}";
     }
+
+    private static bool ShouldQuit(Key key, int keyValue)
+    {
+        if (keyValue == 'q' || keyValue == 'Q')
+        {
+            return true;
+        }
+
+        return keyValue == 3 || key == (Key.CtrlMask | (Key)'c') || key == (Key.CtrlMask | (Key)'C');
+    }
+
 }
