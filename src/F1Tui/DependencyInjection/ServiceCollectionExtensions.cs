@@ -67,6 +67,21 @@ public static class ServiceCollectionExtensions
             var openF1Client = serviceProvider.GetRequiredService<IOpenF1Client>();
             return new SessionService(openF1Client);
         });
+        services.AddSingleton<IRaceResultsService>(serviceProvider =>
+        {
+            var openF1Client = serviceProvider.GetRequiredService<IOpenF1Client>();
+            return new RaceResultsService(openF1Client);
+        });
+        services.AddSingleton<IDriverStandingsService>(serviceProvider =>
+        {
+            var openF1Client = serviceProvider.GetRequiredService<IOpenF1Client>();
+            return new DriverStandingsService(openF1Client);
+        });
+        services.AddSingleton<IConstructorStandingsService>(serviceProvider =>
+        {
+            var openF1Client = serviceProvider.GetRequiredService<IOpenF1Client>();
+            return new ConstructorStandingsService(openF1Client);
+        });
         services.AddSingleton<IAppStateStore, InMemoryAppStateStore>();
         services.AddSingleton<TerminalApp>();
 

@@ -8,4 +8,24 @@ public interface IOpenF1Client
         int year,
         string? sessionName = null,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<OpenF1DriverStandingDto>> GetDriverStandingsAsync(
+        int year,
+        int? meetingKey = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<OpenF1ConstructorStandingDto>> GetConstructorStandingsAsync(
+        int year,
+        int? meetingKey = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<OpenF1PositionDto>> GetPositionsAsync(
+        int? meetingKey = null,
+        int? sessionKey = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<OpenF1DriverDto>> GetDriversAsync(
+        int? meetingKey = null,
+        int? sessionKey = null,
+        CancellationToken cancellationToken = default);
 }

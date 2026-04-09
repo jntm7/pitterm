@@ -13,7 +13,7 @@ public sealed class CachedOpenF1Client : IOpenF1Client
 
     private sealed class CacheEntry
     {
-        public IReadOnlyList<OpenF1SessionDto> Data { get; init; } = [];
+        public object Data { get; init; } = new object();
         public DateTimeOffset ExpiresAt { get; init; }
     }
 
@@ -33,27 +33,109 @@ public sealed class CachedOpenF1Client : IOpenF1Client
         CancellationToken cancellationToken = default)
     {
         var cacheKey = $"sessions|year={year}|session_name={sessionName ?? ""}";
+        var hit = TryGetCached<IReadOnlyList<OpenF1SessionDto>>(cacheKey);
+        if (hit is not null)
+        {
+            return hit;
+        }
+
+        var result = await inner.GetSessionsAsync(year, sessionName, cancellationToken);
+        SetCached(cacheKey, result.ToList());
+        return result;
+    }
+
+    public async Task<IReadOnlyList<OpenF1DriverStandingDto>> GetDriverStandingsAsync(
+        int year,
+        int? meetingKey = null,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"driver-standings|year={year}|meeting_key={meetingKey?.ToString() ?? ""}";
+        var hit = TryGetCached<IReadOnlyList<OpenF1DriverStandingDto>>(cacheKey);
+        if (hit is not null)
+        {
+            return hit;
+        }
+
+        var result = await inner.GetDriverStandingsAsync(year, meetingKey, cancellationToken);
+        SetCached(cacheKey, result.ToList());
+        return result;
+    }
+
+    public async Task<IReadOnlyList<OpenF1ConstructorStandingDto>> GetConstructorStandingsAsync(
+        int year,
+        int? meetingKey = null,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"constructor-standings|year={year}|meeting_key={meetingKey?.ToString() ?? ""}";
+        var hit = TryGetCached<IReadOnlyList<OpenF1ConstructorStandingDto>>(cacheKey);
+        if (hit is not null)
+        {
+            return hit;
+        }
+
+        var result = await inner.GetConstructorStandingsAsync(year, meetingKey, cancellationToken);
+        SetCached(cacheKey, result.ToList());
+        return result;
+    }
+
+    public async Task<IReadOnlyList<OpenF1PositionDto>> GetPositionsAsync(
+        int? meetingKey = null,
+        int? sessionKey = null,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"positions|meeting_key={meetingKey?.ToString() ?? ""}|session_key={sessionKey?.ToString() ?? ""}";
+        var hit = TryGetCached<IReadOnlyList<OpenF1PositionDto>>(cacheKey);
+        if (hit is not null)
+        {
+            return hit;
+        }
+
+        var result = await inner.GetPositionsAsync(meetingKey, sessionKey, cancellationToken);
+        SetCached(cacheKey, result.ToList());
+        return result;
+    }
+
+    public async Task<IReadOnlyList<OpenF1DriverDto>> GetDriversAsync(
+        int? meetingKey = null,
+        int? sessionKey = null,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"drivers|meeting_key={meetingKey?.ToString() ?? ""}|session_key={sessionKey?.ToString() ?? ""}";
+        var hit = TryGetCached<IReadOnlyList<OpenF1DriverDto>>(cacheKey);
+        if (hit is not null)
+        {
+            return hit;
+        }
+
+        var result = await inner.GetDriversAsync(meetingKey, sessionKey, cancellationToken);
+        SetCached(cacheKey, result.ToList());
+        return result;
+    }
+
+    private T? TryGetCached<T>(string cacheKey) where T : class
+    {
         lock (cache)
         {
             if (cache.TryGetValue(cacheKey, out var entry) && entry.ExpiresAt > DateTimeOffset.UtcNow)
             {
                 logger.LogDebug("Cache hit for {CacheKey}", cacheKey);
-                return entry.Data;
+                return entry.Data as T;
             }
         }
 
-        logger.LogDebug("Cache miss for {CacheKey}, fetching from API", cacheKey);
-        var result = await inner.GetSessionsAsync(year, sessionName, cancellationToken);
+        logger.LogDebug("Cache miss for {CacheKey}", cacheKey);
+        return null;
+    }
 
+    private void SetCached(string cacheKey, object data)
+    {
         lock (cache)
         {
             cache[cacheKey] = new CacheEntry
             {
-                Data = result.ToList(),
+                Data = data,
                 ExpiresAt = DateTimeOffset.UtcNow.Add(cacheTtl)
             };
         }
-
-        return result;
     }
 }

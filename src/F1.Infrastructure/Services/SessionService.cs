@@ -86,7 +86,7 @@ public sealed class SessionService : ISessionService
                 continue;
             }
 
-            if (meetingKey.HasValue && item.MeetingKey.HasValue && item.MeetingKey.Value != meetingKey.Value)
+            if (meetingKey.HasValue && item.MeetingKey != meetingKey.Value)
             {
                 continue;
             }
@@ -103,7 +103,15 @@ public sealed class SessionService : ISessionService
                 end));
         }
 
-        return mappedSessions
+        var deduplicated = mappedSessions
+            .GroupBy(session => session.SessionName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group
+                .OrderBy(session => session.StartTime ?? DateTimeOffset.MinValue)
+                .ThenBy(session => session.SessionKey ?? int.MaxValue)
+                .First())
+            .ToList();
+
+        return deduplicated
             .OrderBy(session => SessionOrder(session.SessionName))
             .ThenBy(session => session.StartTime ?? DateTimeOffset.MinValue)
             .ToList();
