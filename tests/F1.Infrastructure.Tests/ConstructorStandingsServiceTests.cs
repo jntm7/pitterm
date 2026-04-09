@@ -7,13 +7,12 @@ namespace F1.Infrastructure.Tests;
 public sealed class ConstructorStandingsServiceTests
 {
     [Fact]
-    public async Task GetConstructorStandingsAsync_Fallback_ReturnsSortedStandings()
+    public async Task GetConstructorStandingsAsync_WithoutClient_ReturnsNoRows()
     {
         IConstructorStandingsService service = new ConstructorStandingsService();
 
         var standings = await service.GetConstructorStandingsAsync(2025);
 
-        Assert.NotEmpty(standings);
-        Assert.True(standings.SequenceEqual(standings.OrderBy(s => s.Position)));
+        Assert.Empty(standings);
     }
 }

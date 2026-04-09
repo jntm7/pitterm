@@ -25,14 +25,23 @@ public sealed class DriverStandingsService : IDriverStandingsService
     {
         if (openF1Client is null)
         {
-            return BuildFallback();
+            return [];
         }
 
         try
         {
             var dtos = await openF1Client.GetDriverStandingsAsync(season, meetingKey, cancellationToken);
+            if (dtos.Count == 0 && meetingKey.HasValue)
+            {
+                dtos = await openF1Client.GetDriverStandingsAsync(season, null, cancellationToken);
+            }
+
             var scopedDtos = ScopeByMeeting(dtos, meetingKey);
             var drivers = await openF1Client.GetDriversAsync(meetingKey, null, cancellationToken);
+            if (drivers.Count == 0)
+            {
+                drivers = await openF1Client.GetDriversAsync(null, null, cancellationToken);
+            }
             var driverLookup = drivers
                 .Where(driver => driver.DriverNumber.HasValue)
                 .GroupBy(driver => driver.DriverNumber!.Value)
@@ -68,7 +77,7 @@ public sealed class DriverStandingsService : IDriverStandingsService
         {
         }
 
-        return BuildFallback();
+        return [];
     }
 
     private static IReadOnlyList<OpenF1DriverStandingDto> ScopeByMeeting(
@@ -140,30 +149,4 @@ public sealed class DriverStandingsService : IDriverStandingsService
         return driver.TeamName ?? "Unknown Team";
     }
 
-    private static IReadOnlyList<DriverStanding> BuildFallback()
-    {
-        return
-        [
-            new(1, "Max Verstappen", "Red Bull Racing", 400),
-            new(2, "Lando Norris", "McLaren", 320),
-            new(3, "Charles Leclerc", "Ferrari", 290),
-            new(4, "Carlos Sainz", "Ferrari", 255),
-            new(5, "Lewis Hamilton", "Mercedes", 225),
-            new(6, "George Russell", "Mercedes", 210),
-            new(7, "Oscar Piastri", "McLaren", 198),
-            new(8, "Sergio Perez", "Red Bull Racing", 180),
-            new(9, "Fernando Alonso", "Aston Martin", 162),
-            new(10, "Lance Stroll", "Aston Martin", 121),
-            new(11, "Yuki Tsunoda", "RB", 103),
-            new(12, "Nico Hulkenberg", "Haas", 84),
-            new(13, "Alexander Albon", "Williams", 73),
-            new(14, "Pierre Gasly", "Alpine", 62),
-            new(15, "Esteban Ocon", "Alpine", 52),
-            new(16, "Kevin Magnussen", "Haas", 40),
-            new(17, "Daniel Ricciardo", "RB", 33),
-            new(18, "Valtteri Bottas", "Kick Sauber", 22),
-            new(19, "Guanyu Zhou", "Kick Sauber", 17),
-            new(20, "Logan Sargeant", "Williams", 6)
-        ];
-    }
 }

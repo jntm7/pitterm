@@ -25,12 +25,17 @@ public sealed class ConstructorStandingsService : IConstructorStandingsService
     {
         if (openF1Client is null)
         {
-            return BuildFallback();
+            return [];
         }
 
         try
         {
             var dtos = await openF1Client.GetConstructorStandingsAsync(season, meetingKey, cancellationToken);
+            if (dtos.Count == 0 && meetingKey.HasValue)
+            {
+                dtos = await openF1Client.GetConstructorStandingsAsync(season, null, cancellationToken);
+            }
+
             var scopedDtos = ScopeByMeeting(dtos, meetingKey);
 
             var dedupedDtos = scopedDtos
@@ -53,6 +58,17 @@ public sealed class ConstructorStandingsService : IConstructorStandingsService
                 .ThenByDescending(dto => dto.Points)
                 .ToList();
 
+            if (standings.Count >= 10)
+            {
+                return standings;
+            }
+
+            var derived = await BuildFromDriverStandingsAsync(season, meetingKey, cancellationToken);
+            if (derived.Count > 0)
+            {
+                return derived;
+            }
+
             if (standings.Count > 0)
             {
                 return standings;
@@ -62,7 +78,63 @@ public sealed class ConstructorStandingsService : IConstructorStandingsService
         {
         }
 
-        return BuildFallback();
+        return [];
+    }
+
+    private async Task<IReadOnlyList<ConstructorStanding>> BuildFromDriverStandingsAsync(
+        int season,
+        int? meetingKey,
+        CancellationToken cancellationToken)
+    {
+        if (openF1Client is null)
+        {
+            return [];
+        }
+
+        var driverStandings = await openF1Client.GetDriverStandingsAsync(season, meetingKey, cancellationToken);
+        if (driverStandings.Count == 0)
+        {
+            return [];
+        }
+
+        var drivers = await openF1Client.GetDriversAsync(meetingKey, null, cancellationToken);
+        if (drivers.Count == 0)
+        {
+            drivers = await openF1Client.GetDriversAsync(null, null, cancellationToken);
+        }
+
+        var driverToTeam = drivers
+            .Where(driver => driver.DriverNumber.HasValue && !string.IsNullOrWhiteSpace(driver.TeamName))
+            .GroupBy(driver => driver.DriverNumber!.Value)
+            .ToDictionary(group => group.Key, group => group.First().TeamName!);
+
+        var teamPoints = driverStandings
+            .Where(item => item.DriverNumber.HasValue)
+            .Select(item => new
+            {
+                Team = driverToTeam.TryGetValue(item.DriverNumber!.Value, out var teamName)
+                    ? teamName
+                    : "Unknown Team",
+                Points = item.PointsCurrent ?? 0
+            })
+            .Where(item => !string.Equals(item.Team, "Unknown Team", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(item => item.Team, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new
+            {
+                TeamName = group.Key,
+                Points = group.Sum(item => item.Points)
+            })
+            .OrderByDescending(item => item.Points)
+            .ThenBy(item => item.TeamName)
+            .ToList();
+
+        var standings = new List<ConstructorStanding>(teamPoints.Count);
+        for (var i = 0; i < teamPoints.Count; i++)
+        {
+            standings.Add(new ConstructorStanding(i + 1, teamPoints[i].TeamName, teamPoints[i].Points));
+        }
+
+        return standings;
     }
 
     private static IReadOnlyList<OpenF1ConstructorStandingDto> ScopeByMeeting(
@@ -98,20 +170,4 @@ public sealed class ConstructorStandingsService : IConstructorStandingsService
             .ToList();
     }
 
-    private static IReadOnlyList<ConstructorStanding> BuildFallback()
-    {
-        return
-        [
-            new(1, "Red Bull Racing", 620),
-            new(2, "Ferrari", 560),
-            new(3, "McLaren", 540),
-            new(4, "Mercedes", 420),
-            new(5, "Aston Martin", 210),
-            new(6, "RB", 136),
-            new(7, "Haas", 124),
-            new(8, "Williams", 79),
-            new(9, "Alpine", 72),
-            new(10, "Kick Sauber", 39)
-        ];
-    }
 }

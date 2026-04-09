@@ -24,11 +24,7 @@ public sealed class RaceService : IRaceService
     {
         if (openF1Client is null)
         {
-            var localRaces = BuildSampleRaces(season)
-                .OrderBy(race => race.RoundNumber)
-                .ToList();
-
-            return Task.FromResult<IReadOnlyList<Race>>(localRaces);
+            return Task.FromResult<IReadOnlyList<Race>>([]);
         }
 
         return GetRacesFromApiAsync(season, cancellationToken);
@@ -49,9 +45,7 @@ public sealed class RaceService : IRaceService
         {
         }
 
-        return BuildSampleRaces(season)
-            .OrderBy(race => race.RoundNumber)
-            .ToList();
+        return [];
     }
 
     private static IReadOnlyList<Race> MapRaces(IReadOnlyList<OpenF1SessionDto> sessions, int season)
@@ -67,12 +61,24 @@ public sealed class RaceService : IRaceService
             .Select(group =>
             {
                 var representative = group.First();
+
+                var hasMeetingIdentity = !string.IsNullOrWhiteSpace(representative.MeetingName)
+                    || !string.IsNullOrWhiteSpace(representative.CountryName)
+                    || !string.IsNullOrWhiteSpace(representative.Location);
+
+                if (!hasMeetingIdentity)
+                {
+                    return null;
+                }
+
                 var raceName =
                     FirstNonEmpty(
                         representative.MeetingName,
                         representative.CountryName is null ? null : $"{representative.CountryName} Grand Prix",
                         representative.Location is null ? null : $"{representative.Location} Grand Prix")
                     ?? "Unknown Grand Prix";
+
+                var location = FirstNonEmpty(representative.Location, representative.CountryName);
 
                 var date = ReadDateOnly(representative.DateStart);
                 var round = representative.Round;
@@ -81,10 +87,13 @@ public sealed class RaceService : IRaceService
                 {
                     representative.MeetingKey,
                     Name = raceName,
+                    Location = location,
                     Date = date,
                     Round = round
                 };
             })
+            .Where(entry => entry is not null)
+            .Select(entry => entry!)
             .OrderBy(entry => entry.Round ?? int.MaxValue)
             .ThenBy(entry => entry.Date ?? DateOnly.MinValue)
             .ThenBy(entry => entry.Name)
@@ -95,7 +104,7 @@ public sealed class RaceService : IRaceService
         {
             var entry = byMeeting[i];
             var roundNumber = entry.Round ?? i + 1;
-            races.Add(new Race(season, roundNumber, entry.Name, entry.MeetingKey, entry.Date));
+            races.Add(new Race(season, roundNumber, entry.Name, entry.Location, entry.MeetingKey, entry.Date));
         }
 
         return races;
@@ -129,14 +138,4 @@ public sealed class RaceService : IRaceService
         return null;
     }
 
-    private static IReadOnlyList<Race> BuildSampleRaces(int season)
-    {
-        return
-        [
-            new(season, 3, "Australian Grand Prix", null, new DateOnly(season, 3, 24)),
-            new(season, 1, "Bahrain Grand Prix", null, new DateOnly(season, 3, 2)),
-            new(season, 4, "Japanese Grand Prix", null, new DateOnly(season, 4, 7)),
-            new(season, 2, "Saudi Arabian Grand Prix", null, new DateOnly(season, 3, 9))
-        ];
-    }
 }

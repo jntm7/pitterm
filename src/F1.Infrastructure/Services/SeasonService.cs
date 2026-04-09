@@ -41,13 +41,16 @@ public sealed class SeasonService : ISeasonService
                 }
                 catch
                 {
-                    break;
+                    continue;
                 }
             }
 
             if (years.Count > 0)
             {
+                var baselineYears = Enumerable.Range(2023, Math.Max(currentYear - 2023 + 1, 1));
+
                 return years
+                    .Union(baselineYears)
                     .OrderByDescending(year => year)
                     .Select(year => new Season(year))
                     .ToList();
@@ -62,11 +65,10 @@ public sealed class SeasonService : ISeasonService
 
     private static IReadOnlyList<Season> BuildFallbackSeasons()
     {
-        return
-        [
-            new(2025),
-            new(2024),
-            new(2023)
-        ];
+        var currentYear = DateTime.UtcNow.Year;
+        return Enumerable.Range(2023, Math.Max(currentYear - 2023 + 1, 1))
+            .OrderByDescending(year => year)
+            .Select(year => new Season(year))
+            .ToList();
     }
 }

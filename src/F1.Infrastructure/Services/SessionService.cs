@@ -26,7 +26,7 @@ public sealed class SessionService : ISessionService
     {
         if (openF1Client is null)
         {
-            return Task.FromResult<IReadOnlyList<Session>>(BuildFallbackSessions(season, roundNumber));
+            return Task.FromResult<IReadOnlyList<Session>>([]);
         }
 
         return GetSessionsFromApiAsync(season, roundNumber, meetingKey, cancellationToken);
@@ -51,7 +51,7 @@ public sealed class SessionService : ISessionService
         {
         }
 
-        return BuildFallbackSessions(season, roundNumber);
+        return [];
     }
 
     private static IReadOnlyList<Session> MapSessions(
@@ -115,18 +115,6 @@ public sealed class SessionService : ISessionService
             .OrderBy(session => SessionOrder(session.SessionName))
             .ThenBy(session => session.StartTime ?? DateTimeOffset.MinValue)
             .ToList();
-    }
-
-    private static IReadOnlyList<Session> BuildFallbackSessions(int season, int roundNumber)
-    {
-        return
-        [
-            new(season, roundNumber, "Practice 1"),
-            new(season, roundNumber, "Practice 2"),
-            new(season, roundNumber, "Practice 3"),
-            new(season, roundNumber, "Qualifying"),
-            new(season, roundNumber, "Race")
-        ];
     }
 
     private static DateTimeOffset? ReadDateTime(string? value)

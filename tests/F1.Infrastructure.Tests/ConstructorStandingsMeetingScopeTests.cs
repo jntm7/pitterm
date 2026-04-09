@@ -21,6 +21,12 @@ public sealed class ConstructorStandingsMeetingScopeTests
         var client = new Mock<IOpenF1Client>();
         client.Setup(c => c.GetConstructorStandingsAsync(2025, 1202, It.IsAny<CancellationToken>()))
             .ReturnsAsync(dtos);
+        client.Setup(c => c.GetDriverStandingsAsync(2025, 1202, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<OpenF1DriverStandingDto>());
+        client.Setup(c => c.GetDriversAsync(1202, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<OpenF1DriverDto>());
+        client.Setup(c => c.GetDriversAsync(null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<OpenF1DriverDto>());
 
         IConstructorStandingsService service = new ConstructorStandingsService(client.Object);
 

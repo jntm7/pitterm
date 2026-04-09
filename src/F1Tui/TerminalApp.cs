@@ -19,7 +19,9 @@ public sealed class TerminalApp
     private enum SessionDetailTab
     {
         SessionInfo = 0,
-        RaceResults = 1
+        RaceResults = 1,
+        Weather = 2,
+        PitStops = 3
     }
 
     private readonly ISeasonService seasonService;
@@ -28,6 +30,8 @@ public sealed class TerminalApp
     private readonly IRaceResultsService raceResultsService;
     private readonly IDriverStandingsService driverStandingsService;
     private readonly IConstructorStandingsService constructorStandingsService;
+    private readonly IWeatherService weatherService;
+    private readonly IPitStopService pitStopService;
     private readonly IAppStateStore stateStore;
     private readonly IOptions<AppOptions> options;
     private readonly ILogger<TerminalApp> logger;
@@ -39,6 +43,8 @@ public sealed class TerminalApp
         IRaceResultsService raceResultsService,
         IDriverStandingsService driverStandingsService,
         IConstructorStandingsService constructorStandingsService,
+        IWeatherService weatherService,
+        IPitStopService pitStopService,
         IAppStateStore stateStore,
         IOptions<AppOptions> options,
         ILogger<TerminalApp> logger)
@@ -49,6 +55,8 @@ public sealed class TerminalApp
         this.raceResultsService = raceResultsService;
         this.driverStandingsService = driverStandingsService;
         this.constructorStandingsService = constructorStandingsService;
+        this.weatherService = weatherService;
+        this.pitStopService = pitStopService;
         this.stateStore = stateStore;
         this.options = options;
         this.logger = logger;
@@ -114,12 +122,8 @@ public sealed class TerminalApp
             .Select(year => new F1.Core.Models.Season(year))
             .ToList();
 
-        stateStore.Update(state => state with
-        {
-            SelectedSeason = null,
-            ActiveScreen = "Seasons",
-            StatusMessage = BuildSeasonsStatusMessage(null)
-        });
+        stateStore.Update(state =>
+            AppStateTransitions.ToSeasons(state, null, BuildSeasonsStatusMessage(null)));
 
         logger.LogInformation(
             "Initial app state: screen={Screen}, season={Season}",
@@ -156,14 +160,22 @@ public sealed class TerminalApp
                 var fetchedNames = fetchedSeasons.Select(season => season.Year.ToString()).ToList();
                 Application.MainLoop?.Invoke(() =>
                 {
+                    var mergedSeasons = seasons
+                        .Select(season => season.Year)
+                        .Union(fetchedSeasons.Select(season => season.Year))
+                        .OrderByDescending(year => year)
+                        .Select(year => new F1.Core.Models.Season(year))
+                        .ToList();
+
+                    var mergedNames = mergedSeasons.Select(season => season.Year.ToString()).ToList();
                     var currentNames = seasons.Select(season => season.Year.ToString()).ToList();
-                    if (fetchedNames.SequenceEqual(currentNames))
+                    if (mergedNames.SequenceEqual(currentNames))
                     {
                         return;
                     }
 
-                    seasons = fetchedSeasons.ToList();
-                    seasonListView.SetSource(fetchedNames);
+                    seasons = mergedSeasons;
+                    seasonListView.SetSource(mergedNames);
                     statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
                 });
             }
@@ -174,6 +186,8 @@ public sealed class TerminalApp
 
         var raceRows = new List<string>();
         var sessionRows = new List<string>();
+        var raceRowsAreData = false;
+        var sessionRowsAreData = false;
 
         var raceListView = new ListView(raceRows)
         {
@@ -260,6 +274,10 @@ public sealed class TerminalApp
         F1.Core.Models.Race? detailRace = null;
         var driverStandingsLines = new List<string>();
         var driverStandingsOffset = 0;
+        var raceResultsLines = new List<string>();
+        var raceResultsOffset = 0;
+        var pitSummaryLines = new List<string>();
+        var pitSummaryOffset = 0;
 
         void RenderDriverStandingsViewport()
         {
@@ -281,6 +299,46 @@ public sealed class TerminalApp
             driverStandingsView.Text = string.Join(Environment.NewLine, visibleLines);
         }
 
+        void RenderRaceResultsViewport()
+        {
+            if (raceResultsLines.Count == 0)
+            {
+                sessionDetailView.Text = string.Empty;
+                return;
+            }
+
+            var viewportHeight = Math.Max(sessionDetailView.Bounds.Height, 5);
+            var maxOffset = Math.Max(raceResultsLines.Count - viewportHeight, 0);
+            raceResultsOffset = Math.Clamp(raceResultsOffset, 0, maxOffset);
+
+            var visibleLines = raceResultsLines
+                .Skip(raceResultsOffset)
+                .Take(viewportHeight)
+                .ToList();
+
+            sessionDetailView.Text = string.Join(Environment.NewLine, visibleLines);
+        }
+
+        void RenderPitSummaryViewport()
+        {
+            if (pitSummaryLines.Count == 0)
+            {
+                sessionDetailView.Text = string.Empty;
+                return;
+            }
+
+            var viewportHeight = Math.Max(sessionDetailView.Bounds.Height, 5);
+            var maxOffset = Math.Max(pitSummaryLines.Count - viewportHeight, 0);
+            pitSummaryOffset = Math.Clamp(pitSummaryOffset, 0, maxOffset);
+
+            var visibleLines = pitSummaryLines
+                .Skip(pitSummaryOffset)
+                .Take(viewportHeight)
+                .ToList();
+
+            sessionDetailView.Text = string.Join(Environment.NewLine, visibleLines);
+        }
+
         async Task RefreshRaceHubTabAsync()
         {
             raceHubTabsLabel.Text = BuildRaceHubTabsHeader(selectedRaceHubTab);
@@ -300,6 +358,14 @@ public sealed class TerminalApp
                         detailRace?.MeetingKey,
                         cancellationToken);
 
+                    if (standings.Count == 0)
+                    {
+                        driverStandingsLines = SplitLines("No driver standings available for this race yet.");
+                        driverStandingsOffset = 0;
+                        RenderDriverStandingsViewport();
+                        return;
+                    }
+
                     driverStandingsLines = BuildDriverStandingsTableText(
                         stateStore.Current.SelectedSeason,
                         detailRace,
@@ -312,10 +378,7 @@ public sealed class TerminalApp
                 }
                 catch
                 {
-                    driverStandingsLines = BuildDriverStandingsPlaceholder(stateStore.Current.SelectedSeason, detailRace)
-                        .Replace("\r", string.Empty)
-                        .Split('\n')
-                        .ToList();
+                    driverStandingsLines = SplitLines("Unable to load driver standings right now.");
                     driverStandingsOffset = 0;
                     RenderDriverStandingsViewport();
                 }
@@ -331,6 +394,12 @@ public sealed class TerminalApp
                         detailRace?.MeetingKey,
                         cancellationToken);
 
+                    if (standings.Count == 0)
+                    {
+                        constructorStandingsView.Text = "No constructor standings available for this race yet.";
+                        return;
+                    }
+
                     constructorStandingsView.Text = BuildConstructorStandingsTableText(
                         stateStore.Current.SelectedSeason,
                         detailRace,
@@ -338,7 +407,7 @@ public sealed class TerminalApp
                 }
                 catch
                 {
-                    constructorStandingsView.Text = BuildConstructorStandingsPlaceholder(stateStore.Current.SelectedSeason, detailRace);
+                    constructorStandingsView.Text = "Unable to load constructor standings right now.";
                 }
             }
 
@@ -403,18 +472,56 @@ public sealed class TerminalApp
                         detailSession.SessionKey,
                         cancellationToken);
 
-                    sessionDetailView.Text = BuildRaceResultsTableText(
+                    if (results.Count == 0)
+                    {
+                        raceResultsLines = SplitLines("No race results available for this session yet.");
+                        raceResultsOffset = 0;
+                        RenderRaceResultsViewport();
+                        return;
+                    }
+
+                    raceResultsLines = SplitLines(BuildRaceResultsTableText(
                         stateStore.Current.SelectedSeason,
                         detailRace,
-                        results);
+                        results));
+                    raceResultsOffset = 0;
+                    RenderRaceResultsViewport();
                 }
                 catch
                 {
-                    sessionDetailView.Text = BuildRaceResultsPlaceholder(stateStore.Current.SelectedSeason, detailRace, detailSession);
+                    raceResultsLines = SplitLines("Unable to load race results right now.");
+                    raceResultsOffset = 0;
+                    RenderRaceResultsViewport();
                 }
 
                 return;
             }
+
+            if (selectedDetailTab == SessionDetailTab.Weather)
+            {
+                sessionDetailView.Text = "Loading weather...";
+                var items = await weatherService.GetWeatherSamplesAsync(detailSession.MeetingKey, detailSession.SessionKey, cancellationToken);
+                sessionDetailView.Text = BuildWeatherSummaryText(items);
+                raceResultsLines.Clear();
+                pitSummaryLines.Clear();
+                return;
+            }
+
+            if (selectedDetailTab == SessionDetailTab.PitStops)
+            {
+                sessionDetailView.Text = "Loading pit stops...";
+                var items = await pitStopService.GetPitStopsAsync(detailSession.MeetingKey, detailSession.SessionKey, cancellationToken);
+                pitSummaryLines = SplitLines(BuildPitStopsSummaryText(items));
+                pitSummaryOffset = 0;
+                RenderPitSummaryViewport();
+                raceResultsLines.Clear();
+                return;
+            }
+
+            raceResultsLines.Clear();
+            raceResultsOffset = 0;
+            pitSummaryLines.Clear();
+            pitSummaryOffset = 0;
 
             sessionDetailView.Text = BuildSessionDetailTextForTab(
                 selectedDetailTab,
@@ -465,24 +572,24 @@ public sealed class TerminalApp
                 Application.Refresh();
 
                 raceModels = (await raceService.GetRacesBySeasonAsync(selectedSeason, cancellationToken)).ToList();
-                raceRows = raceModels
-                    .OrderBy(race => race.RoundNumber)
-                    .Select(race => $"R{race.RoundNumber}  {race.GrandPrixName}")
-                    .ToList();
+                raceRowsAreData = raceModels.Count > 0;
+                raceRows = raceRowsAreData
+                    ? raceModels
+                        .OrderBy(race => race.RoundNumber)
+                        .Select(race => $"R{race.RoundNumber}  {race.GrandPrixName}")
+                        .ToList()
+                    : ["Loading or no race data available yet."];
                 raceListView.SetSource(raceRows);
                 seasonListView.Visible = false;
                 raceListView.Visible = true;
                 title.Text = $"Races - {selectedSeason}";
 
-                stateStore.Update(state => state with
-                {
-                    SelectedSeason = selectedSeason,
-                    SelectedRoundNumber = null,
-                    SelectedGrandPrixName = null,
-                    SelectedSessionName = null,
-                    ActiveScreen = "Races",
-                    StatusMessage = BuildRaceStatusMessage(selectedSeason, null)
-                });
+                stateStore.Update(state =>
+                    AppStateTransitions.ToRaces(
+                        state,
+                        selectedSeason,
+                        null,
+                        BuildRaceStatusMessage(selectedSeason, null)));
 
                 statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
                 raceListView.SetFocus();
@@ -509,14 +616,11 @@ public sealed class TerminalApp
                 seasonListView.Visible = true;
                 title.Text = "F1 Seasons";
 
-                stateStore.Update(state => state with
-                {
-                    SelectedRoundNumber = null,
-                    SelectedGrandPrixName = null,
-                    SelectedSessionName = null,
-                    ActiveScreen = "Seasons",
-                    StatusMessage = BuildSeasonsStatusMessage(state.SelectedSeason)
-                });
+                stateStore.Update(state =>
+                    AppStateTransitions.ToSeasons(
+                        state,
+                        state.SelectedSeason,
+                        BuildSeasonsStatusMessage(state.SelectedSeason)));
 
                 statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
                 seasonListView.SetFocus();
@@ -528,6 +632,12 @@ public sealed class TerminalApp
 
                 if (raceListView.SelectedItem < 0 || raceListView.SelectedItem >= raceRows.Count)
                 {
+                    return;
+                }
+
+                if (!raceRowsAreData)
+                {
+                    statusLine.Text = "Race data is still loading or unavailable.";
                     return;
                 }
 
@@ -543,9 +653,12 @@ public sealed class TerminalApp
                     selectedRace.MeetingKey,
                     cancellationToken)).ToList();
 
-                sessionRows = sessionModels
-                    .Select(session => session.SessionName)
-                    .ToList();
+                sessionRowsAreData = sessionModels.Count > 0;
+                sessionRows = sessionRowsAreData
+                    ? sessionModels
+                        .Select(session => session.SessionName)
+                        .ToList()
+                    : ["Loading or no session data available yet."];
                 sessionListView.SetSource(sessionRows);
                 sessionDetailView.Text = string.Empty;
                 sessionDetailTabsLabel.Text = string.Empty;
@@ -564,18 +677,16 @@ public sealed class TerminalApp
                 selectedRaceHubTab = RaceHubTab.Sessions;
                 await RefreshRaceHubTabAsync();
 
-                stateStore.Update(state => state with
-                {
-                    SelectedRoundNumber = selectedRace.RoundNumber,
-                    SelectedGrandPrixName = selectedRace.GrandPrixName,
-                    SelectedSessionName = null,
-                    ActiveScreen = "Sessions",
-                    StatusMessage = BuildSessionsStatusMessage(
-                        state.SelectedSeason,
+                stateStore.Update(state =>
+                    AppStateTransitions.ToSessions(
+                        state,
                         selectedRace.RoundNumber,
                         selectedRace.GrandPrixName,
-                        null)
-                });
+                        BuildSessionsStatusMessage(
+                            state.SelectedSeason,
+                            selectedRace.RoundNumber,
+                            selectedRace.GrandPrixName,
+                            null)));
 
                 statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
                 sessionListView.SetFocus();
@@ -606,6 +717,12 @@ public sealed class TerminalApp
                     return;
                 }
 
+                if (!sessionRowsAreData)
+                {
+                    statusLine.Text = "Session data is still loading or unavailable.";
+                    return;
+                }
+
                 var selectedSessionModel = sessionModels[sessionListView.SelectedItem];
                 var selectedRaceModel = raceListView.SelectedItem >= 0 && raceListView.SelectedItem < raceModels.Count
                     ? raceModels[raceListView.SelectedItem]
@@ -622,16 +739,15 @@ public sealed class TerminalApp
                 title.Text = "Session Detail";
                 shortcutsLine.Text = BuildSessionDetailShortcutsText();
 
-                stateStore.Update(state => state with
-                {
-                    SelectedSessionName = selectedSessionModel.SessionName,
-                    ActiveScreen = "SessionDetail",
-                    StatusMessage = BuildSessionsStatusMessage(
-                        state.SelectedSeason,
-                        selectedSessionModel.RoundNumber,
-                        state.SelectedGrandPrixName,
-                        selectedSessionModel.SessionName)
-                });
+                stateStore.Update(state =>
+                    AppStateTransitions.ToSessionDetail(
+                        state,
+                        selectedSessionModel.SessionName,
+                        BuildSessionsStatusMessage(
+                            state.SelectedSeason,
+                            selectedSessionModel.RoundNumber,
+                            state.SelectedGrandPrixName,
+                            selectedSessionModel.SessionName)));
 
                 statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
                 sessionDetailView.SetFocus();
@@ -768,11 +884,39 @@ public sealed class TerminalApp
                 Application.RequestStop();
             }
 
+            if (selectedDetailTab == SessionDetailTab.RaceResults && args.KeyEvent.Key == Key.CursorDown)
+            {
+                args.Handled = true;
+                raceResultsOffset += 1;
+                RenderRaceResultsViewport();
+            }
+
+            if (selectedDetailTab == SessionDetailTab.RaceResults && args.KeyEvent.Key == Key.CursorUp)
+            {
+                args.Handled = true;
+                raceResultsOffset -= 1;
+                RenderRaceResultsViewport();
+            }
+
+            if (selectedDetailTab == SessionDetailTab.PitStops && args.KeyEvent.Key == Key.CursorDown)
+            {
+                args.Handled = true;
+                pitSummaryOffset += 1;
+                RenderPitSummaryViewport();
+            }
+
+            if (selectedDetailTab == SessionDetailTab.PitStops && args.KeyEvent.Key == Key.CursorUp)
+            {
+                args.Handled = true;
+                pitSummaryOffset -= 1;
+                RenderPitSummaryViewport();
+            }
+
             if (args.KeyEvent.Key == Key.CursorLeft)
             {
                 args.Handled = true;
                 selectedDetailTab = selectedDetailTab == SessionDetailTab.SessionInfo
-                    ? SessionDetailTab.RaceResults
+                    ? SessionDetailTab.PitStops
                     : selectedDetailTab - 1;
                 await RefreshDetailTabAsync();
             }
@@ -780,13 +924,13 @@ public sealed class TerminalApp
             if (args.KeyEvent.Key == Key.CursorRight)
             {
                 args.Handled = true;
-                selectedDetailTab = selectedDetailTab == SessionDetailTab.RaceResults
+                selectedDetailTab = selectedDetailTab == SessionDetailTab.PitStops
                     ? SessionDetailTab.SessionInfo
                     : selectedDetailTab + 1;
                 await RefreshDetailTabAsync();
             }
 
-            if (args.KeyEvent.KeyValue >= '1' && args.KeyEvent.KeyValue <= '2')
+            if (args.KeyEvent.KeyValue >= '1' && args.KeyEvent.KeyValue <= '4')
             {
                 args.Handled = true;
                 selectedDetailTab = (SessionDetailTab)(args.KeyEvent.KeyValue - '1');
@@ -944,17 +1088,15 @@ public sealed class TerminalApp
     {
         if (tab == SessionDetailTab.RaceResults)
         {
-            return BuildRaceResultsPlaceholder(selectedSeason, selectedRace, selectedSession);
+            return "Loading race results...";
         }
 
         var seasonText = selectedSeason?.ToString() ?? "n/a";
         var roundText = selectedSession.RoundNumber.ToString();
         var grandPrixText = selectedRace?.GrandPrixName ?? "n/a";
+        var locationText = selectedRace?.Location ?? "n/a";
         var startText = selectedSession.StartTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm zzz") ?? "n/a";
         var endText = selectedSession.EndTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm zzz") ?? "n/a";
-        var meetingKeyText = selectedSession.MeetingKey?.ToString() ?? "n/a";
-        var sessionKeyText = selectedSession.SessionKey?.ToString() ?? "n/a";
-
         return string.Join(
             Environment.NewLine,
             "Session Information",
@@ -962,13 +1104,11 @@ public sealed class TerminalApp
             $"Season: {seasonText}",
             $"Round: {roundText}",
             $"Grand Prix: {grandPrixText}",
+            $"Location: {locationText}",
             $"Session: {selectedSession.SessionName}",
             string.Empty,
             $"Start: {startText}",
-            $"End: {endText}",
-            string.Empty,
-            $"Meeting Key: {meetingKeyText}",
-            $"Session Key: {sessionKeyText}");
+            $"End: {endText}");
     }
 
     private static string BuildSessionDetailTabsHeader(SessionDetailTab selectedTab)
@@ -976,7 +1116,9 @@ public sealed class TerminalApp
         return string.Join(
             "  ",
             BuildTabLabel(SessionDetailTab.SessionInfo, selectedTab, "1) Session Info"),
-            BuildTabLabel(SessionDetailTab.RaceResults, selectedTab, "2) Results"));
+            BuildTabLabel(SessionDetailTab.RaceResults, selectedTab, "2) Results"),
+            BuildTabLabel(SessionDetailTab.Weather, selectedTab, "3) Weather"),
+            BuildTabLabel(SessionDetailTab.PitStops, selectedTab, "4) Pit"));
     }
 
     private static string BuildRaceHubTabsHeader(RaceHubTab selectedTab)
@@ -996,25 +1138,6 @@ public sealed class TerminalApp
     private static string BuildTabLabel(SessionDetailTab tab, SessionDetailTab selectedTab, string label)
     {
         return tab == selectedTab ? $"[{label}]" : label;
-    }
-
-    private static string BuildRaceResultsPlaceholder(
-        int? selectedSeason,
-        F1.Core.Models.Race? selectedRace,
-        F1.Core.Models.Session selectedSession)
-    {
-        return string.Join(
-            Environment.NewLine,
-            "Race Results",
-            string.Empty,
-            $"Season: {selectedSeason?.ToString() ?? "n/a"}",
-            $"Round: {selectedSession.RoundNumber}",
-            $"Grand Prix: {selectedRace?.GrandPrixName ?? "n/a"}",
-            string.Empty,
-            "Source endpoint:",
-            "v1/position + v1/drivers",
-            string.Empty,
-            "Falling back due to unavailable or incomplete data.");
     }
 
     private static string BuildRaceResultsTableText(
@@ -1039,36 +1162,6 @@ public sealed class TerminalApp
         }
 
         return string.Join(Environment.NewLine, lines);
-    }
-
-    private static string BuildDriverStandingsPlaceholder(int? selectedSeason, F1.Core.Models.Race? selectedRace)
-    {
-        return string.Join(
-            Environment.NewLine,
-            "Driver Championship Standings",
-            string.Empty,
-            $"Season: {selectedSeason?.ToString() ?? "n/a"}",
-            $"After: {selectedRace?.GrandPrixName ?? "selected race"}",
-            string.Empty,
-            "Source endpoint:",
-            "v1/championship_drivers",
-            string.Empty,
-            "Standings table integration is next up.");
-    }
-
-    private static string BuildConstructorStandingsPlaceholder(int? selectedSeason, F1.Core.Models.Race? selectedRace)
-    {
-        return string.Join(
-            Environment.NewLine,
-            "Constructor Championship Standings",
-            string.Empty,
-            $"Season: {selectedSeason?.ToString() ?? "n/a"}",
-            $"After: {selectedRace?.GrandPrixName ?? "selected race"}",
-            string.Empty,
-            "Source endpoint:",
-            "v1/championship_teams",
-            string.Empty,
-            "Standings table integration is next up.");
     }
 
     private static string BuildDriverStandingsTableText(
@@ -1119,6 +1212,100 @@ public sealed class TerminalApp
         return string.Join(Environment.NewLine, lines);
     }
 
+    private static string BuildWeatherSummaryText(IReadOnlyList<F1.Core.Models.WeatherSample> samples)
+    {
+        if (samples.Count == 0)
+        {
+            return "No weather data available for this session.";
+        }
+
+        var latest = samples
+            .OrderByDescending(sample => sample.Timestamp ?? DateTimeOffset.MinValue)
+            .First();
+
+        var avgAir = samples.Where(sample => sample.AirTemperature.HasValue).Select(sample => sample.AirTemperature!.Value).DefaultIfEmpty().Average();
+        var avgTrack = samples.Where(sample => sample.TrackTemperature.HasValue).Select(sample => sample.TrackTemperature!.Value).DefaultIfEmpty().Average();
+        var rainySamples = samples.Count(sample => (sample.Rainfall ?? 0) > 0);
+
+        return string.Join(
+            Environment.NewLine,
+            "Weather Summary",
+            string.Empty,
+            $"Samples: {samples.Count}",
+            $"Average Air Temp: {avgAir:0.0} C",
+            $"Average Track Temp: {avgTrack:0.0} C",
+            $"Rainy Samples: {rainySamples}",
+            string.Empty,
+            $"Latest Sample: {latest.Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "n/a"}",
+            $"Latest Air Temp: {(latest.AirTemperature.HasValue ? latest.AirTemperature.Value.ToString("0.0") : "n/a")}",
+            $"Latest Track Temp: {(latest.TrackTemperature.HasValue ? latest.TrackTemperature.Value.ToString("0.0") : "n/a")}",
+            $"Latest Rainfall: {(latest.Rainfall.HasValue ? latest.Rainfall.Value.ToString("0.0") : "n/a")}");
+    }
+
+    private static string BuildPitStopsSummaryText(IReadOnlyList<F1.Core.Models.PitStop> pitStops)
+    {
+        if (pitStops.Count == 0)
+        {
+            return "No pit stop data available for this session.";
+        }
+
+        var fastest = pitStops
+            .Where(pit => pit.PitDuration.HasValue)
+            .OrderBy(pit => pit.PitDuration!.Value)
+            .FirstOrDefault();
+
+        var totalByDriver = pitStops
+            .Where(pit => pit.DriverNumber.HasValue)
+            .GroupBy(pit => pit.DriverNumber!.Value)
+            .Select(group => new { Driver = group.Key, Count = group.Count() })
+            .OrderByDescending(item => item.Count)
+            .ThenBy(item => item.Driver)
+            .ToList();
+
+        var lines = new List<string>
+        {
+            "Pit Stop Summary",
+            string.Empty,
+            $"Total Pit Events: {pitStops.Count}",
+            fastest is null ? "Fastest Pit: n/a" : $"Fastest Pit: {FormatDriverNameOnly(fastest.DriverName)} in {fastest.PitDuration:0.000}s",
+            string.Empty,
+            "Driver Pit Stop Counts:",
+            "Driver                  Team                   Stops",
+            "----------------------  ---------------------  -----"
+        };
+
+        var driverMeta = pitStops
+            .Where(pit => pit.DriverNumber.HasValue)
+            .GroupBy(pit => pit.DriverNumber!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => new
+                {
+                    Name = group.Select(pit => pit.DriverName).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)) ?? "Unknown Driver",
+                    Team = group.Select(pit => pit.TeamName).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)) ?? "Unknown Team"
+                });
+
+        lines.AddRange(totalByDriver.Select(item =>
+        {
+            var meta = driverMeta.TryGetValue(item.Driver, out var value)
+                ? value
+                : new { Name = "Unknown Driver", Team = "Unknown Team" };
+
+            return $"{Truncate(meta.Name, 22),-22}  {Truncate(meta.Team, 21),-21}  {item.Count,5}";
+        }));
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string FormatDriverNameOnly(string? name)
+    {
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
+        return "Unknown Driver";
+    }
+
     private static string Truncate(string value, int maxLength)
     {
         if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
@@ -1129,6 +1316,14 @@ public sealed class TerminalApp
         return value.Substring(0, Math.Max(maxLength - 1, 0)) + "~";
     }
 
+    private static List<string> SplitLines(string content)
+    {
+        return content
+            .Replace("\r", string.Empty)
+            .Split('\n')
+            .ToList();
+    }
+
     private static string BuildDefaultShortcutsText()
     {
         return "[Enter] Select  [Esc] Back  [Q] Quit";
@@ -1136,12 +1331,12 @@ public sealed class TerminalApp
 
     private static string BuildSessionDetailShortcutsText()
     {
-        return "[1-2][Left/Right] Tab  [Up/Down] Scroll  [Esc] Back  [Q] Quit";
+        return "[1-4] Tab  [Left/Right] Tab  [Up/Down] Scroll  [Esc] Back  [Q] Quit";
     }
 
     private static string BuildRaceHubShortcutsText()
     {
-        return "[1-3][Left/Right] Tab  [Up/Down] Scroll  [Enter] Session Detail  [Esc] Back  [Q] Quit";
+        return "[1-3] Tab  [Left/Right] Tab  [Up/Down] Scroll  [Enter] Session Detail  [Esc] Back  [Q] Quit";
     }
 
     private static bool ShouldQuit(Key key, int keyValue)

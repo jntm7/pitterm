@@ -7,13 +7,12 @@ namespace F1.Infrastructure.Tests;
 public sealed class DriverStandingsServiceTests
 {
     [Fact]
-    public async Task GetDriverStandingsAsync_Fallback_ReturnsSortedStandings()
+    public async Task GetDriverStandingsAsync_WithoutClient_ReturnsNoRows()
     {
         IDriverStandingsService service = new DriverStandingsService();
 
         var standings = await service.GetDriverStandingsAsync(2025);
 
-        Assert.NotEmpty(standings);
-        Assert.True(standings.SequenceEqual(standings.OrderBy(s => s.Position)));
+        Assert.Empty(standings);
     }
 }

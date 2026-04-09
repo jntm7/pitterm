@@ -28,4 +28,19 @@ public interface IOpenF1Client
         int? meetingKey = null,
         int? sessionKey = null,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<OpenF1WeatherDto>> GetWeatherAsync(
+        int? meetingKey = null,
+        int? sessionKey = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<OpenF1PitDto>> GetPitStopsAsync(
+        int? meetingKey = null,
+        int? sessionKey = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<OpenF1LapDto>> GetLapsAsync(
+        int? meetingKey = null,
+        int? sessionKey = null,
+        CancellationToken cancellationToken = default);
 }

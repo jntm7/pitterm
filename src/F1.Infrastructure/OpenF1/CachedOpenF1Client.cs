@@ -112,6 +112,57 @@ public sealed class CachedOpenF1Client : IOpenF1Client
         return result;
     }
 
+    public async Task<IReadOnlyList<OpenF1WeatherDto>> GetWeatherAsync(
+        int? meetingKey = null,
+        int? sessionKey = null,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"weather|meeting_key={meetingKey?.ToString() ?? ""}|session_key={sessionKey?.ToString() ?? ""}";
+        var hit = TryGetCached<IReadOnlyList<OpenF1WeatherDto>>(cacheKey);
+        if (hit is not null)
+        {
+            return hit;
+        }
+
+        var result = await inner.GetWeatherAsync(meetingKey, sessionKey, cancellationToken);
+        SetCached(cacheKey, result.ToList());
+        return result;
+    }
+
+    public async Task<IReadOnlyList<OpenF1PitDto>> GetPitStopsAsync(
+        int? meetingKey = null,
+        int? sessionKey = null,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"pit|meeting_key={meetingKey?.ToString() ?? ""}|session_key={sessionKey?.ToString() ?? ""}";
+        var hit = TryGetCached<IReadOnlyList<OpenF1PitDto>>(cacheKey);
+        if (hit is not null)
+        {
+            return hit;
+        }
+
+        var result = await inner.GetPitStopsAsync(meetingKey, sessionKey, cancellationToken);
+        SetCached(cacheKey, result.ToList());
+        return result;
+    }
+
+    public async Task<IReadOnlyList<OpenF1LapDto>> GetLapsAsync(
+        int? meetingKey = null,
+        int? sessionKey = null,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"laps|meeting_key={meetingKey?.ToString() ?? ""}|session_key={sessionKey?.ToString() ?? ""}";
+        var hit = TryGetCached<IReadOnlyList<OpenF1LapDto>>(cacheKey);
+        if (hit is not null)
+        {
+            return hit;
+        }
+
+        var result = await inner.GetLapsAsync(meetingKey, sessionKey, cancellationToken);
+        SetCached(cacheKey, result.ToList());
+        return result;
+    }
+
     private T? TryGetCached<T>(string cacheKey) where T : class
     {
         lock (cache)

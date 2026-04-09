@@ -25,7 +25,7 @@ public sealed class RaceResultsService : IRaceResultsService
     {
         if (openF1Client is null)
         {
-            return BuildFallback();
+            return [];
         }
 
         try
@@ -68,7 +68,7 @@ public sealed class RaceResultsService : IRaceResultsService
                 .OrderBy(result => result.Position)
                 .ToList();
 
-            if (results.Count > 0)
+            if (results.Count > 0 && IsPlausibleResults(results))
             {
                 return results;
             }
@@ -77,7 +77,32 @@ public sealed class RaceResultsService : IRaceResultsService
         {
         }
 
-        return BuildFallback();
+        return [];
+    }
+
+    private static bool IsPlausibleResults(IReadOnlyList<RaceResult> results)
+    {
+        if (results.Count < 10)
+        {
+            return false;
+        }
+
+        var uniqueDrivers = results
+            .Select(result => result.DriverName.Trim())
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        if (uniqueDrivers < 10)
+        {
+            return false;
+        }
+
+        var duplicatePositions = results
+            .GroupBy(result => result.Position)
+            .Any(group => group.Count() > 1);
+
+        return !duplicatePositions;
     }
 
     private static DateTimeOffset ParseDate(string? date)
@@ -87,30 +112,4 @@ public sealed class RaceResultsService : IRaceResultsService
             : DateTimeOffset.MinValue;
     }
 
-    private static IReadOnlyList<RaceResult> BuildFallback()
-    {
-        return
-        [
-            new(1, "Max Verstappen", "Red Bull Racing"),
-            new(2, "Lando Norris", "McLaren"),
-            new(3, "Charles Leclerc", "Ferrari"),
-            new(4, "Carlos Sainz", "Ferrari"),
-            new(5, "Lewis Hamilton", "Mercedes"),
-            new(6, "George Russell", "Mercedes"),
-            new(7, "Fernando Alonso", "Aston Martin"),
-            new(8, "Oscar Piastri", "McLaren"),
-            new(9, "Sergio Perez", "Red Bull Racing"),
-            new(10, "Lance Stroll", "Aston Martin"),
-            new(11, "Yuki Tsunoda", "RB"),
-            new(12, "Nico Hulkenberg", "Haas"),
-            new(13, "Alexander Albon", "Williams"),
-            new(14, "Pierre Gasly", "Alpine"),
-            new(15, "Esteban Ocon", "Alpine"),
-            new(16, "Kevin Magnussen", "Haas"),
-            new(17, "Daniel Ricciardo", "RB"),
-            new(18, "Valtteri Bottas", "Kick Sauber"),
-            new(19, "Guanyu Zhou", "Kick Sauber"),
-            new(20, "Logan Sargeant", "Williams")
-        ];
-    }
 }
