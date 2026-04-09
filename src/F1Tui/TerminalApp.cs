@@ -10,17 +10,23 @@ namespace F1Tui;
 public sealed class TerminalApp
 {
     private readonly ISeasonService seasonService;
+    private readonly IRaceService raceService;
+    private readonly ISessionService sessionService;
     private readonly IAppStateStore stateStore;
     private readonly IOptions<AppOptions> options;
     private readonly ILogger<TerminalApp> logger;
 
     public TerminalApp(
         ISeasonService seasonService,
+        IRaceService raceService,
+        ISessionService sessionService,
         IAppStateStore stateStore,
         IOptions<AppOptions> options,
         ILogger<TerminalApp> logger)
     {
         this.seasonService = seasonService;
+        this.raceService = raceService;
+        this.sessionService = sessionService;
         this.stateStore = stateStore;
         this.options = options;
         this.logger = logger;
@@ -49,6 +55,8 @@ public sealed class TerminalApp
             stateStore.Current.SelectedSeason);
 
         var seasonNames = seasons.Select(season => season.Year.ToString()).ToList();
+        var raceModels = new List<F1.Core.Models.Race>();
+        var sessionModels = new List<F1.Core.Models.Session>();
 
         Application.Init();
 
@@ -147,7 +155,7 @@ public sealed class TerminalApp
             }
         };
 
-        seasonListView.KeyPress += args =>
+        seasonListView.KeyPress += async args =>
         {
             if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
             {
@@ -158,8 +166,17 @@ public sealed class TerminalApp
             if (args.KeyEvent.Key == Key.Enter)
             {
                 args.Handled = true;
+                if (seasonListView.SelectedItem < 0 || seasonListView.SelectedItem >= seasons.Count)
+                {
+                    return;
+                }
+
                 var selectedSeason = seasons[seasonListView.SelectedItem].Year;
-                raceRows = BuildRaceRows(selectedSeason);
+                raceModels = (await raceService.GetRacesBySeasonAsync(selectedSeason, cancellationToken)).ToList();
+                raceRows = raceModels
+                    .OrderBy(race => race.RoundNumber)
+                    .Select(race => $"R{race.RoundNumber}  {race.GrandPrixName} ({race.Season})")
+                    .ToList();
                 raceListView.SetSource(raceRows);
                 seasonListView.Visible = false;
                 raceListView.Visible = true;
@@ -177,7 +194,7 @@ public sealed class TerminalApp
             }
         };
 
-        raceListView.KeyPress += args =>
+        raceListView.KeyPress += async args =>
         {
             if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
             {
@@ -194,11 +211,14 @@ public sealed class TerminalApp
                 seasonListView.Visible = true;
                 title.Text = "F1 Seasons";
 
-                stateStore.Update(state => state with
-                {
-                    ActiveScreen = "Seasons",
-                    StatusMessage = BuildSeasonsStatusMessage(state.SelectedSeason)
-                });
+            stateStore.Update(state => state with
+            {
+                SelectedRoundNumber = null,
+                SelectedGrandPrixName = null,
+                SelectedSessionName = null,
+                ActiveScreen = "Seasons",
+                StatusMessage = BuildSeasonsStatusMessage(state.SelectedSeason)
+            });
 
                 statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
                 seasonListView.SetFocus();
@@ -214,7 +234,16 @@ public sealed class TerminalApp
                 }
 
                 var selectedEntry = raceRows[raceListView.SelectedItem];
-                sessionRows = BuildSessionRows(selectedEntry);
+                var selectedRace = raceModels[raceListView.SelectedItem];
+
+                sessionModels = (await sessionService.GetSessionsByRaceAsync(
+                    selectedRace.Season,
+                    selectedRace.RoundNumber,
+                    cancellationToken)).ToList();
+
+                sessionRows = sessionModels
+                    .Select(session => session.SessionName)
+                    .ToList();
                 sessionListView.SetSource(sessionRows);
 
                 seasonListView.Visible = false;
@@ -224,8 +253,15 @@ public sealed class TerminalApp
 
                 stateStore.Update(state => state with
                 {
+                    SelectedRoundNumber = selectedRace.RoundNumber,
+                    SelectedGrandPrixName = selectedRace.GrandPrixName,
+                    SelectedSessionName = null,
                     ActiveScreen = "Sessions",
-                    StatusMessage = BuildSessionsStatusMessage(state.SelectedSeason, selectedEntry, null)
+                    StatusMessage = BuildSessionsStatusMessage(
+                        state.SelectedSeason,
+                        selectedRace.RoundNumber,
+                        selectedRace.GrandPrixName,
+                        null)
                 });
 
                 statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
@@ -253,7 +289,8 @@ public sealed class TerminalApp
                 stateStore.Update(state => state with
                 {
                     ActiveScreen = "Races",
-                    StatusMessage = BuildRaceStatusMessage(state.SelectedSeason, null)
+                    SelectedSessionName = null,
+                    StatusMessage = BuildRaceStatusMessage(state.SelectedSeason, state.SelectedGrandPrixName)
                 });
 
                 statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
@@ -268,6 +305,9 @@ public sealed class TerminalApp
             stateStore.Update(state => state with
             {
                 SelectedSeason = selectedSeason,
+                SelectedRoundNumber = null,
+                SelectedGrandPrixName = null,
+                SelectedSessionName = null,
                 ActiveScreen = "Seasons",
                 StatusMessage = BuildSeasonsStatusMessage(selectedSeason)
             });
@@ -288,9 +328,13 @@ public sealed class TerminalApp
             }
 
             var selectedEntry = raceRows[args.Item];
+            var selectedRace = raceModels[args.Item];
 
             stateStore.Update(state => state with
             {
+                SelectedRoundNumber = selectedRace.RoundNumber,
+                SelectedGrandPrixName = selectedRace.GrandPrixName,
+                SelectedSessionName = null,
                 StatusMessage = BuildRaceStatusMessage(state.SelectedSeason, selectedEntry)
             });
 
@@ -305,13 +349,20 @@ public sealed class TerminalApp
             }
 
             var selectedSession = sessionRows[args.Item];
-            var selectedRace = raceListView.SelectedItem >= 0 && raceListView.SelectedItem < raceRows.Count
-                ? raceRows[raceListView.SelectedItem]
+            var selectedRace = raceListView.SelectedItem >= 0 && raceListView.SelectedItem < raceModels.Count
+                ? raceModels[raceListView.SelectedItem]
                 : null;
 
             stateStore.Update(state => state with
             {
-                StatusMessage = BuildSessionsStatusMessage(state.SelectedSeason, selectedRace, selectedSession)
+                SelectedRoundNumber = selectedRace?.RoundNumber,
+                SelectedGrandPrixName = selectedRace?.GrandPrixName,
+                SelectedSessionName = selectedSession,
+                StatusMessage = BuildSessionsStatusMessage(
+                    state.SelectedSeason,
+                    selectedRace?.RoundNumber,
+                    selectedRace?.GrandPrixName,
+                    selectedSession)
             });
 
             statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
@@ -340,34 +391,16 @@ public sealed class TerminalApp
         return $"Season {selectedSeason?.ToString() ?? "none"} | Grand Prix: {grandPrix} | Data: {options.Value.ApiBaseUrl}";
     }
 
-    private string BuildSessionsStatusMessage(int? selectedSeason, string? selectedRaceEntry, string? selectedSession)
+    private string BuildSessionsStatusMessage(
+        int? selectedSeason,
+        int? selectedRoundNumber,
+        string? selectedGrandPrixName,
+        string? selectedSession)
     {
-        var grandPrix = string.IsNullOrWhiteSpace(selectedRaceEntry) ? "n/a" : selectedRaceEntry;
+        var roundText = selectedRoundNumber?.ToString() ?? "n/a";
+        var grandPrix = string.IsNullOrWhiteSpace(selectedGrandPrixName) ? "n/a" : selectedGrandPrixName;
         var sessionName = string.IsNullOrWhiteSpace(selectedSession) ? "select a session" : selectedSession;
-        return $"Season {selectedSeason?.ToString() ?? "none"} | Grand Prix: {grandPrix} | Session: {sessionName} | Data: {options.Value.ApiBaseUrl}";
-    }
-
-    private static List<string> BuildRaceRows(int season)
-    {
-        return new List<string>
-        {
-            $"R1  Bahrain Grand Prix ({season})",
-            $"R2  Saudi Arabian Grand Prix ({season})",
-            $"R3  Australian Grand Prix ({season})",
-            $"R4  Japanese Grand Prix ({season})"
-        };
-    }
-
-    private static List<string> BuildSessionRows(string raceEntry)
-    {
-        return new List<string>
-        {
-            $"Practice 1 - {raceEntry}",
-            $"Practice 2 - {raceEntry}",
-            $"Practice 3 - {raceEntry}",
-            $"Qualifying - {raceEntry}",
-            $"Race - {raceEntry}"
-        };
+        return $"Season {selectedSeason?.ToString() ?? "none"} | Round {roundText} | Grand Prix: {grandPrix} | Session: {sessionName} | Data: {options.Value.ApiBaseUrl}";
     }
 
     private static bool ShouldQuit(Key key, int keyValue)

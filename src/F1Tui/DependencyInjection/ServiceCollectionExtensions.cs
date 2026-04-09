@@ -29,6 +29,8 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddSingleton<ISeasonService, SeasonService>();
+        services.AddSingleton<IRaceService, RaceService>();
+        services.AddSingleton<ISessionService, SessionService>();
         services.AddSingleton<IAppStateStore, InMemoryAppStateStore>();
         services.AddSingleton<TerminalApp>();
 
