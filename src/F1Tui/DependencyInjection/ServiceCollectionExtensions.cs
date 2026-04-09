@@ -37,7 +37,11 @@ public static class ServiceCollectionExtensions
             logging.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
         });
 
-        services.AddSingleton<ISeasonService, SeasonService>();
+        services.AddSingleton<ISeasonService>(serviceProvider =>
+        {
+            var openF1Client = serviceProvider.GetRequiredService<IOpenF1Client>();
+            return new SeasonService(openF1Client);
+        });
         services.AddHttpClient<OpenF1Client>((serviceProvider, client) =>
         {
             var appOptions = serviceProvider.GetRequiredService<IOptions<AppOptions>>().Value;
@@ -53,8 +57,16 @@ public static class ServiceCollectionExtensions
             return new CachedOpenF1Client(inner, options, logger);
         });
 
-        services.AddSingleton<IRaceService, RaceService>();
-        services.AddSingleton<ISessionService, SessionService>();
+        services.AddSingleton<IRaceService>(serviceProvider =>
+        {
+            var openF1Client = serviceProvider.GetRequiredService<IOpenF1Client>();
+            return new RaceService(openF1Client);
+        });
+        services.AddSingleton<ISessionService>(serviceProvider =>
+        {
+            var openF1Client = serviceProvider.GetRequiredService<IOpenF1Client>();
+            return new SessionService(openF1Client);
+        });
         services.AddSingleton<IAppStateStore, InMemoryAppStateStore>();
         services.AddSingleton<TerminalApp>();
 

@@ -31,10 +31,17 @@ public sealed class SeasonService : ISeasonService
 
             for (var year = 2023; year <= currentYear + 1; year++)
             {
-                var sessions = await openF1Client.GetSessionsAsync(year, null, cancellationToken);
-                if (sessions.Count > 0)
+                try
                 {
-                    years.Add(year);
+                    var sessions = await openF1Client.GetSessionsAsync(year, null, cancellationToken);
+                    if (sessions.Count > 0)
+                    {
+                        years.Add(year);
+                    }
+                }
+                catch
+                {
+                    break;
                 }
             }
 
@@ -55,10 +62,11 @@ public sealed class SeasonService : ISeasonService
 
     private static IReadOnlyList<Season> BuildFallbackSeasons()
     {
-        var currentYear = DateTime.UtcNow.Year;
-        return Enumerable.Range(2023, currentYear - 2023 + 1)
-            .OrderByDescending(year => year)
-            .Select(year => new Season(year))
-            .ToList();
+        return
+        [
+            new(2025),
+            new(2024),
+            new(2023)
+        ];
     }
 }

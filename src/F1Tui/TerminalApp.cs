@@ -66,15 +66,6 @@ public sealed class TerminalApp
         };
         window.ColorScheme = darkScheme;
 
-        var loadingLabel = new Label("Loading seasons...")
-        {
-            X = 1,
-            Y = 1,
-            Width = Dim.Fill() - 2,
-            Height = 1
-        };
-        loadingLabel.ColorScheme = darkScheme;
-
         var statusLine = new Label("Initializing...")
         {
             X = 1,
@@ -93,12 +84,13 @@ public sealed class TerminalApp
         };
         shortcutsLine.ColorScheme = darkScheme;
 
-        window.Add(loadingLabel, statusLine, shortcutsLine);
         top.Add(window);
 
-        Application.Refresh();
-
-        var seasons = await seasonService.GetSeasonsAsync(cancellationToken);
+        var currentYear = DateTime.UtcNow.Year;
+        var seasons = Enumerable.Range(2023, Math.Max(currentYear - 2023 + 1, 1))
+            .OrderByDescending(year => year)
+            .Select(year => new F1.Core.Models.Season(year))
+            .ToList();
 
         stateStore.Update(state => state with
         {
@@ -114,8 +106,6 @@ public sealed class TerminalApp
 
         var seasonNames = seasons.Select(season => season.Year.ToString()).ToList();
 
-        window.Remove(loadingLabel);
-
         var title = new Label("F1 Seasons")
         {
             X = 1,
@@ -130,6 +120,35 @@ public sealed class TerminalApp
             Height = Dim.Fill() - 3
         };
         seasonListView.ColorScheme = darkScheme;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var fetchedSeasons = await seasonService.GetSeasonsAsync(cancellationToken);
+                if (fetchedSeasons.Count == 0)
+                {
+                    return;
+                }
+
+                var fetchedNames = fetchedSeasons.Select(season => season.Year.ToString()).ToList();
+                Application.MainLoop?.Invoke(() =>
+                {
+                    var currentNames = seasons.Select(season => season.Year.ToString()).ToList();
+                    if (fetchedNames.SequenceEqual(currentNames))
+                    {
+                        return;
+                    }
+
+                    seasons = fetchedSeasons.ToList();
+                    seasonListView.SetSource(fetchedNames);
+                    statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+                });
+            }
+            catch
+            {
+            }
+        }, cancellationToken);
 
         var raceRows = new List<string>();
         var sessionRows = new List<string>();
