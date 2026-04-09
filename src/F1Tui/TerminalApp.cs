@@ -40,21 +40,6 @@ public sealed class TerminalApp
             options.Value.RequestTimeoutSeconds,
             options.Value.CacheTtlMinutes);
 
-        var seasons = await seasonService.GetSeasonsAsync(cancellationToken);
-
-        stateStore.Update(state => state with
-        {
-            SelectedSeason = null,
-            ActiveScreen = "Seasons",
-            StatusMessage = BuildSeasonsStatusMessage(null)
-        });
-
-        logger.LogInformation(
-            "Initial app state: screen={Screen}, season={Season}",
-            stateStore.Current.ActiveScreen,
-            stateStore.Current.SelectedSeason);
-
-        var seasonNames = seasons.Select(season => season.Year.ToString()).ToList();
         var raceModels = new List<F1.Core.Models.Race>();
         var sessionModels = new List<F1.Core.Models.Session>();
 
@@ -80,6 +65,56 @@ public sealed class TerminalApp
             Height = Dim.Fill()
         };
         window.ColorScheme = darkScheme;
+
+        var loadingLabel = new Label("Loading seasons...")
+        {
+            X = 1,
+            Y = 1,
+            Width = Dim.Fill() - 2,
+            Height = 1
+        };
+        loadingLabel.ColorScheme = darkScheme;
+
+        var statusLine = new Label("Initializing...")
+        {
+            X = 1,
+            Y = Pos.AnchorEnd(2),
+            Width = Dim.Fill() - 2,
+            Height = 1
+        };
+        statusLine.ColorScheme = darkScheme;
+
+        var shortcutsLine = new Label("[Enter] Select  [Esc] Back  [Q] Quit")
+        {
+            X = 1,
+            Y = Pos.AnchorEnd(1),
+            Width = Dim.Fill() - 2,
+            Height = 1
+        };
+        shortcutsLine.ColorScheme = darkScheme;
+
+        window.Add(loadingLabel, statusLine, shortcutsLine);
+        top.Add(window);
+
+        Application.Refresh();
+
+        var seasons = await seasonService.GetSeasonsAsync(cancellationToken);
+
+        stateStore.Update(state => state with
+        {
+            SelectedSeason = null,
+            ActiveScreen = "Seasons",
+            StatusMessage = BuildSeasonsStatusMessage(null)
+        });
+
+        logger.LogInformation(
+            "Initial app state: screen={Screen}, season={Season}",
+            stateStore.Current.ActiveScreen,
+            stateStore.Current.SelectedSeason);
+
+        var seasonNames = seasons.Select(season => season.Year.ToString()).ToList();
+
+        window.Remove(loadingLabel);
 
         var title = new Label("F1 Seasons")
         {
@@ -119,23 +154,7 @@ public sealed class TerminalApp
         };
         sessionListView.ColorScheme = darkScheme;
 
-        var statusLine = new Label(stateStore.Current.StatusMessage ?? "Ready")
-        {
-            X = 1,
-            Y = Pos.AnchorEnd(2),
-            Width = Dim.Fill() - 2,
-            Height = 1
-        };
-        statusLine.ColorScheme = darkScheme;
-
-        var shortcutsLine = new Label("[Enter] Select  [Esc] Back  [Q] Quit")
-        {
-            X = 1,
-            Y = Pos.AnchorEnd(1),
-            Width = Dim.Fill() - 2,
-            Height = 1
-        };
-        shortcutsLine.ColorScheme = darkScheme;
+        statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
 
         top.KeyPress += args =>
         {
@@ -172,6 +191,10 @@ public sealed class TerminalApp
                 }
 
                 var selectedSeason = seasons[seasonListView.SelectedItem].Year;
+
+                statusLine.Text = $"Loading races for {selectedSeason}...";
+                Application.Refresh();
+
                 raceModels = (await raceService.GetRacesBySeasonAsync(selectedSeason, cancellationToken)).ToList();
                 raceRows = raceModels
                     .OrderBy(race => race.RoundNumber)
@@ -182,15 +205,15 @@ public sealed class TerminalApp
                 raceListView.Visible = true;
                 title.Text = $"Races - {selectedSeason}";
 
-            stateStore.Update(state => state with
-            {
-                SelectedSeason = selectedSeason,
-                SelectedRoundNumber = null,
-                SelectedGrandPrixName = null,
-                SelectedSessionName = null,
-                ActiveScreen = "Races",
-                StatusMessage = BuildRaceStatusMessage(selectedSeason, null)
-            });
+                stateStore.Update(state => state with
+                {
+                    SelectedSeason = selectedSeason,
+                    SelectedRoundNumber = null,
+                    SelectedGrandPrixName = null,
+                    SelectedSessionName = null,
+                    ActiveScreen = "Races",
+                    StatusMessage = BuildRaceStatusMessage(selectedSeason, null)
+                });
 
                 statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
                 raceListView.SetFocus();
@@ -214,14 +237,14 @@ public sealed class TerminalApp
                 seasonListView.Visible = true;
                 title.Text = "F1 Seasons";
 
-            stateStore.Update(state => state with
-            {
-                SelectedRoundNumber = null,
-                SelectedGrandPrixName = null,
-                SelectedSessionName = null,
-                ActiveScreen = "Seasons",
-                StatusMessage = BuildSeasonsStatusMessage(state.SelectedSeason)
-            });
+                stateStore.Update(state => state with
+                {
+                    SelectedRoundNumber = null,
+                    SelectedGrandPrixName = null,
+                    SelectedSessionName = null,
+                    ActiveScreen = "Seasons",
+                    StatusMessage = BuildSeasonsStatusMessage(state.SelectedSeason)
+                });
 
                 statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
                 seasonListView.SetFocus();
@@ -238,6 +261,9 @@ public sealed class TerminalApp
 
                 var selectedEntry = raceRows[raceListView.SelectedItem];
                 var selectedRace = raceModels[raceListView.SelectedItem];
+
+                statusLine.Text = $"Loading sessions for {selectedRace.GrandPrixName}...";
+                Application.Refresh();
 
                 sessionModels = (await sessionService.GetSessionsByRaceAsync(
                     selectedRace.Season,
@@ -375,7 +401,6 @@ public sealed class TerminalApp
         };
 
         window.Add(title, seasonListView, raceListView, sessionListView, statusLine, shortcutsLine);
-        top.Add(window);
 
         Application.Run();
         Application.Shutdown();
@@ -418,5 +443,4 @@ public sealed class TerminalApp
 
         return keyValue == 3 || key == (Key.CtrlMask | (Key)'c') || key == (Key.CtrlMask | (Key)'C');
     }
-
 }
