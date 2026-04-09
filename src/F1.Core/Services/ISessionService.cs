@@ -7,5 +7,6 @@ public interface ISessionService
     Task<IReadOnlyList<Session>> GetSessionsByRaceAsync(
         int season,
         int roundNumber,
+        int? meetingKey = null,
         CancellationToken cancellationToken = default);
 }

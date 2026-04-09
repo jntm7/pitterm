@@ -1,52 +1,47 @@
 using F1.Core.Models;
 using F1.Core.Services;
-using System.Text.Json;
+using F1.Infrastructure.OpenF1;
+using F1.Infrastructure.OpenF1.Models;
 
 namespace F1.Infrastructure.Services;
 
 public sealed class SessionService : ISessionService
 {
-    private readonly HttpClient? httpClient;
+    private readonly IOpenF1Client? openF1Client;
 
     public SessionService()
     {
     }
 
-    public SessionService(HttpClient httpClient)
+    public SessionService(IOpenF1Client openF1Client)
     {
-        this.httpClient = httpClient;
+        this.openF1Client = openF1Client;
     }
 
     public Task<IReadOnlyList<Session>> GetSessionsByRaceAsync(
         int season,
         int roundNumber,
+        int? meetingKey = null,
         CancellationToken cancellationToken = default)
     {
-        if (httpClient is null)
+        if (openF1Client is null)
         {
             return Task.FromResult<IReadOnlyList<Session>>(BuildFallbackSessions(season, roundNumber));
         }
 
-        return GetSessionsFromApiAsync(season, roundNumber, cancellationToken);
+        return GetSessionsFromApiAsync(season, roundNumber, meetingKey, cancellationToken);
     }
 
     private async Task<IReadOnlyList<Session>> GetSessionsFromApiAsync(
         int season,
         int roundNumber,
+        int? meetingKey,
         CancellationToken cancellationToken)
     {
         try
         {
-            using var response = await httpClient!.GetAsync($"sessions?year={season}", cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                return BuildFallbackSessions(season, roundNumber);
-            }
-
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-
-            var sessions = MapSessions(document.RootElement, season, roundNumber);
+            var openF1Sessions = await openF1Client!.GetSessionsAsync(season, null, cancellationToken);
+            var sessions = MapSessions(openF1Sessions, season, roundNumber, meetingKey);
             if (sessions.Count > 0)
             {
                 return sessions;
@@ -59,40 +54,56 @@ public sealed class SessionService : ISessionService
         return BuildFallbackSessions(season, roundNumber);
     }
 
-    private static IReadOnlyList<Session> MapSessions(JsonElement root, int season, int roundNumber)
+    private static IReadOnlyList<Session> MapSessions(
+        IReadOnlyList<OpenF1SessionDto> sessions,
+        int season,
+        int roundNumber,
+        int? meetingKey)
     {
-        if (root.ValueKind != JsonValueKind.Array)
+        if (sessions.Count == 0)
         {
             return [];
         }
 
-        var sessions = new List<Session>();
-        foreach (var item in root.EnumerateArray())
+        var mappedSessions = new List<Session>();
+        foreach (var item in sessions)
         {
-            var sessionName = ReadString(item, "session_name");
+            var sessionName = item.SessionName;
             if (string.IsNullOrWhiteSpace(sessionName))
             {
                 continue;
             }
 
-            var sessionSeason = ReadInt(item, "year") ?? season;
+            var sessionSeason = item.Year ?? season;
             if (sessionSeason != season)
             {
                 continue;
             }
 
-            var detectedRound = ReadInt(item, "round");
+            var detectedRound = item.Round;
             if (detectedRound.HasValue && detectedRound.Value != roundNumber)
             {
                 continue;
             }
 
-            var start = ReadDateTime(item, "date_start");
-            var end = ReadDateTime(item, "date_end");
-            sessions.Add(new Session(season, roundNumber, sessionName, start, end));
+            if (meetingKey.HasValue && item.MeetingKey.HasValue && item.MeetingKey.Value != meetingKey.Value)
+            {
+                continue;
+            }
+
+            var start = ReadDateTime(item.DateStart);
+            var end = ReadDateTime(item.DateEnd);
+            mappedSessions.Add(new Session(
+                season,
+                detectedRound ?? roundNumber,
+                sessionName,
+                item.MeetingKey,
+                item.SessionKey,
+                start,
+                end));
         }
 
-        return sessions
+        return mappedSessions
             .OrderBy(session => SessionOrder(session.SessionName))
             .ThenBy(session => session.StartTime ?? DateTimeOffset.MinValue)
             .ToList();
@@ -110,46 +121,14 @@ public sealed class SessionService : ISessionService
         ];
     }
 
-    private static string? ReadString(JsonElement element, string propertyName)
+    private static DateTimeOffset? ReadDateTime(string? value)
     {
-        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
+        if (string.IsNullOrWhiteSpace(value))
         {
             return null;
         }
 
-        var text = value.GetString();
-        return string.IsNullOrWhiteSpace(text) ? null : text;
-    }
-
-    private static int? ReadInt(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-        {
-            return null;
-        }
-
-        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var numericValue))
-        {
-            return numericValue;
-        }
-
-        if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out var parsed))
-        {
-            return parsed;
-        }
-
-        return null;
-    }
-
-    private static DateTimeOffset? ReadDateTime(JsonElement element, string propertyName)
-    {
-        var text = ReadString(element, propertyName);
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        return DateTimeOffset.TryParse(text, out var parsed)
+        return DateTimeOffset.TryParse(value, out var parsed)
             ? parsed
             : null;
     }

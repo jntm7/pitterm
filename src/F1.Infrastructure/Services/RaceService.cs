@@ -1,27 +1,28 @@
 using F1.Core.Models;
 using F1.Core.Services;
-using System.Text.Json;
+using F1.Infrastructure.OpenF1;
+using F1.Infrastructure.OpenF1.Models;
 
 namespace F1.Infrastructure.Services;
 
 public sealed class RaceService : IRaceService
 {
-    private readonly HttpClient? httpClient;
+    private readonly IOpenF1Client? openF1Client;
 
     public RaceService()
     {
     }
 
-    public RaceService(HttpClient httpClient)
+    public RaceService(IOpenF1Client openF1Client)
     {
-        this.httpClient = httpClient;
+        this.openF1Client = openF1Client;
     }
 
     public Task<IReadOnlyList<Race>> GetRacesBySeasonAsync(
         int season,
         CancellationToken cancellationToken = default)
     {
-        if (httpClient is null)
+        if (openF1Client is null)
         {
             var localRaces = BuildSampleRaces(season)
                 .OrderBy(race => race.RoundNumber)
@@ -37,19 +38,8 @@ public sealed class RaceService : IRaceService
     {
         try
         {
-            using var response = await httpClient!.GetAsync($"sessions?year={season}&session_name=Race", cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return BuildSampleRaces(season)
-                    .OrderBy(race => race.RoundNumber)
-                    .ToList();
-            }
-
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-
-            var mappedRaces = MapRaces(document.RootElement, season);
+            var raceSessions = await openF1Client!.GetSessionsAsync(season, "Race", cancellationToken);
+            var mappedRaces = MapRaces(raceSessions, season);
             if (mappedRaces.Count > 0)
             {
                 return mappedRaces;
@@ -64,64 +54,61 @@ public sealed class RaceService : IRaceService
             .ToList();
     }
 
-    private static IReadOnlyList<Race> MapRaces(JsonElement root, int season)
+    private static IReadOnlyList<Race> MapRaces(IReadOnlyList<OpenF1SessionDto> sessions, int season)
     {
-        if (root.ValueKind != JsonValueKind.Array)
+        if (sessions.Count == 0)
         {
             return [];
         }
 
-        var candidates = new List<(string Name, DateOnly? Date)>();
+        var byMeeting = sessions
+            .Where(session => (session.Year ?? season) == season)
+            .GroupBy(session => session.MeetingKey)
+            .Select(group =>
+            {
+                var representative = group.First();
+                var raceName =
+                    FirstNonEmpty(
+                        representative.MeetingName,
+                        representative.CountryName is null ? null : $"{representative.CountryName} Grand Prix",
+                        representative.Location is null ? null : $"{representative.Location} Grand Prix")
+                    ?? "Unknown Grand Prix";
 
-        foreach (var item in root.EnumerateArray())
-        {
-            var meetingName = ReadString(item, "meeting_name");
-            var countryName = ReadString(item, "country_name");
-            var location = ReadString(item, "location");
+                var date = ReadDateOnly(representative.DateStart);
+                var round = representative.Round;
 
-            var raceName =
-                FirstNonEmpty(meetingName, countryName is null ? null : $"{countryName} Grand Prix", location is null ? null : $"{location} Grand Prix")
-                ?? "Unknown Grand Prix";
-
-            var date = ReadDateOnly(item, "date_start");
-            candidates.Add((raceName, date));
-        }
-
-        var ordered = candidates
-            .OrderBy(candidate => candidate.Date ?? DateOnly.MinValue)
-            .ThenBy(candidate => candidate.Name)
+                return new
+                {
+                    representative.MeetingKey,
+                    Name = raceName,
+                    Date = date,
+                    Round = round
+                };
+            })
+            .OrderBy(entry => entry.Round ?? int.MaxValue)
+            .ThenBy(entry => entry.Date ?? DateOnly.MinValue)
+            .ThenBy(entry => entry.Name)
             .ToList();
 
-        var races = new List<Race>(ordered.Count);
-        for (var i = 0; i < ordered.Count; i++)
+        var races = new List<Race>(byMeeting.Count);
+        for (var i = 0; i < byMeeting.Count; i++)
         {
-            var candidate = ordered[i];
-            races.Add(new Race(season, i + 1, candidate.Name, candidate.Date));
+            var entry = byMeeting[i];
+            var roundNumber = entry.Round ?? i + 1;
+            races.Add(new Race(season, roundNumber, entry.Name, entry.MeetingKey, entry.Date));
         }
 
         return races;
     }
 
-    private static string? ReadString(JsonElement element, string propertyName)
+    private static DateOnly? ReadDateOnly(string? value)
     {
-        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
+        if (string.IsNullOrWhiteSpace(value))
         {
             return null;
         }
 
-        var text = value.GetString();
-        return string.IsNullOrWhiteSpace(text) ? null : text;
-    }
-
-    private static DateOnly? ReadDateOnly(JsonElement element, string propertyName)
-    {
-        var text = ReadString(element, propertyName);
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        if (!DateTimeOffset.TryParse(text, out var timestamp))
+        if (!DateTimeOffset.TryParse(value, out var timestamp))
         {
             return null;
         }
@@ -146,10 +133,10 @@ public sealed class RaceService : IRaceService
     {
         return
         [
-            new(season, 3, "Australian Grand Prix", new DateOnly(season, 3, 24)),
-            new(season, 1, "Bahrain Grand Prix", new DateOnly(season, 3, 2)),
-            new(season, 4, "Japanese Grand Prix", new DateOnly(season, 4, 7)),
-            new(season, 2, "Saudi Arabian Grand Prix", new DateOnly(season, 3, 9))
+            new(season, 3, "Australian Grand Prix", null, new DateOnly(season, 3, 24)),
+            new(season, 1, "Bahrain Grand Prix", null, new DateOnly(season, 3, 2)),
+            new(season, 4, "Japanese Grand Prix", null, new DateOnly(season, 4, 7)),
+            new(season, 2, "Saudi Arabian Grand Prix", null, new DateOnly(season, 3, 9))
         ];
     }
 }

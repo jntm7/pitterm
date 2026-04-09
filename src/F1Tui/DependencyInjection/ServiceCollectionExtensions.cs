@@ -1,4 +1,5 @@
 using F1.Core.Services;
+using F1.Infrastructure.OpenF1;
 using F1.Infrastructure.Services;
 using F1Tui.Configuration;
 using F1Tui.State;
@@ -22,6 +23,10 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<AppOptions>, AppOptionsValidator>();
 
+        services
+            .AddOptions<OpenF1CacheOptions>()
+            .Bind(configuration.GetSection(OpenF1CacheOptions.SectionName));
+
         services.AddLogging(logging =>
         {
             logging.ClearProviders();
@@ -33,19 +38,23 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddSingleton<ISeasonService, SeasonService>();
-        services.AddHttpClient<IRaceService, RaceService>((serviceProvider, client) =>
+        services.AddHttpClient<OpenF1Client>((serviceProvider, client) =>
         {
             var appOptions = serviceProvider.GetRequiredService<IOptions<AppOptions>>().Value;
             client.BaseAddress = new Uri($"{appOptions.ApiBaseUrl.TrimEnd('/')}/");
             client.Timeout = TimeSpan.FromSeconds(appOptions.RequestTimeoutSeconds);
         });
 
-        services.AddHttpClient<ISessionService, SessionService>((serviceProvider, client) =>
+        services.AddSingleton<IOpenF1Client>(serviceProvider =>
         {
-            var appOptions = serviceProvider.GetRequiredService<IOptions<AppOptions>>().Value;
-            client.BaseAddress = new Uri($"{appOptions.ApiBaseUrl.TrimEnd('/')}/");
-            client.Timeout = TimeSpan.FromSeconds(appOptions.RequestTimeoutSeconds);
+            var inner = serviceProvider.GetRequiredService<OpenF1Client>();
+            var options = serviceProvider.GetRequiredService<IOptions<OpenF1CacheOptions>>();
+            var logger = serviceProvider.GetRequiredService<ILogger<CachedOpenF1Client>>();
+            return new CachedOpenF1Client(inner, options, logger);
         });
+
+        services.AddSingleton<IRaceService, RaceService>();
+        services.AddSingleton<ISessionService, SessionService>();
         services.AddSingleton<IAppStateStore, InMemoryAppStateStore>();
         services.AddSingleton<TerminalApp>();
 

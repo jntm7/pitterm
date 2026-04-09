@@ -242,6 +242,7 @@ public sealed class TerminalApp
                 sessionModels = (await sessionService.GetSessionsByRaceAsync(
                     selectedRace.Season,
                     selectedRace.RoundNumber,
+                    selectedRace.MeetingKey,
                     cancellationToken)).ToList();
 
                 sessionRows = sessionModels
