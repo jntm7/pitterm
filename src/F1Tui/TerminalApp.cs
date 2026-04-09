@@ -182,12 +182,15 @@ public sealed class TerminalApp
                 raceListView.Visible = true;
                 title.Text = $"Races - {selectedSeason}";
 
-                stateStore.Update(state => state with
-                {
-                    SelectedSeason = selectedSeason,
-                    ActiveScreen = "Races",
-                    StatusMessage = BuildRaceStatusMessage(selectedSeason, null)
-                });
+            stateStore.Update(state => state with
+            {
+                SelectedSeason = selectedSeason,
+                SelectedRoundNumber = null,
+                SelectedGrandPrixName = null,
+                SelectedSessionName = null,
+                ActiveScreen = "Races",
+                StatusMessage = BuildRaceStatusMessage(selectedSeason, null)
+            });
 
                 statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
                 raceListView.SetFocus();
@@ -288,6 +291,8 @@ public sealed class TerminalApp
 
                 stateStore.Update(state => state with
                 {
+                    SelectedRoundNumber = state.SelectedRoundNumber,
+                    SelectedGrandPrixName = state.SelectedGrandPrixName,
                     ActiveScreen = "Races",
                     SelectedSessionName = null,
                     StatusMessage = BuildRaceStatusMessage(state.SelectedSeason, state.SelectedGrandPrixName)

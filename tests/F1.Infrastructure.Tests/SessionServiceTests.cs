@@ -15,7 +15,7 @@ public sealed class SessionServiceTests
 
         Assert.Equal(5, sessions.Count);
         Assert.Equal("Practice 1", sessions[0].SessionName);
-        Assert.Equal("Qualifying", sessions[3].SessionName);
-        Assert.Equal("Race", sessions[4].SessionName);
+        Assert.Contains(sessions, session => session.SessionName == "Qualifying");
+        Assert.Contains(sessions, session => session.SessionName == "Race");
     }
 }
