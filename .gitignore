@@ -44,6 +44,7 @@
 build/
 cmake-build-*/
 out/
+artifacts/
 
 # .NET build artifacts
 bin/
