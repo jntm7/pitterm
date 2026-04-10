@@ -765,7 +765,7 @@ public sealed class TerminalApp
                 raceHubTabsLabel.Visible = false;
                 driverStandingsView.Visible = false;
                 constructorStandingsView.Visible = false;
-                title.Text = $"Races - {stateStore.Current.SelectedSeason?.ToString() ?? "n/a"}";
+                title.Text = $"Races - {stateStore.Current.SelectedSeason?.ToString() ?? "N/A"}";
                 shortcutsLine.Text = BuildDefaultShortcutsText();
 
                 stateStore.Update(state => state with
@@ -821,7 +821,7 @@ public sealed class TerminalApp
                 sessionListView.Visible = false;
                 raceListView.Visible = true;
                 seasonListView.Visible = false;
-                title.Text = $"Races - {stateStore.Current.SelectedSeason?.ToString() ?? "n/a"}";
+                title.Text = $"Races - {stateStore.Current.SelectedSeason?.ToString() ?? "N/A"}";
                 shortcutsLine.Text = BuildDefaultShortcutsText();
 
                 stateStore.Update(state => state with
@@ -861,7 +861,7 @@ public sealed class TerminalApp
                 sessionListView.Visible = false;
                 raceListView.Visible = true;
                 seasonListView.Visible = false;
-                title.Text = $"Races - {stateStore.Current.SelectedSeason?.ToString() ?? "n/a"}";
+                title.Text = $"Races - {stateStore.Current.SelectedSeason?.ToString() ?? "N/A"}";
                 shortcutsLine.Text = BuildDefaultShortcutsText();
 
                 stateStore.Update(state => state with
@@ -1065,7 +1065,7 @@ public sealed class TerminalApp
     private string BuildRaceStatusMessage(int? selectedSeason, string? selectedRaceEntry)
     {
         var grandPrix = string.IsNullOrWhiteSpace(selectedRaceEntry) ? "Select Race" : selectedRaceEntry;
-        return $"Season {selectedSeason?.ToString() ?? "none"} | {grandPrix} | Data: {options.Value.ApiBaseUrl}";
+        return $"Season {selectedSeason?.ToString() ?? "N/A"} | {grandPrix} | Data: {options.Value.ApiBaseUrl}";
     }
 
     private string BuildSessionsStatusMessage(
@@ -1074,10 +1074,10 @@ public sealed class TerminalApp
         string? selectedGrandPrixName,
         string? selectedSession)
     {
-        var roundText = selectedRoundNumber?.ToString() ?? "n/a";
-        var grandPrix = string.IsNullOrWhiteSpace(selectedGrandPrixName) ? "n/a" : selectedGrandPrixName;
-        var sessionName = string.IsNullOrWhiteSpace(selectedSession) ? "select a session" : selectedSession;
-        return $"Season {selectedSeason?.ToString() ?? "none"} | R{roundText} | {grandPrix} | {sessionName}";
+        var roundText = selectedRoundNumber?.ToString() ?? "N/A";
+        var grandPrix = string.IsNullOrWhiteSpace(selectedGrandPrixName) ? "N/A" : selectedGrandPrixName;
+        var sessionName = string.IsNullOrWhiteSpace(selectedSession) ? "Select Session" : selectedSession;
+        return $"Season {selectedSeason?.ToString() ?? "N/A"} | R{roundText} | {grandPrix} | {sessionName}";
     }
 
     private static string BuildSessionDetailTextForTab(
@@ -1091,12 +1091,12 @@ public sealed class TerminalApp
             return "Loading race results...";
         }
 
-        var seasonText = selectedSeason?.ToString() ?? "n/a";
+        var seasonText = selectedSeason?.ToString() ?? "N/A";
         var roundText = selectedSession.RoundNumber.ToString();
-        var grandPrixText = selectedRace?.GrandPrixName ?? "n/a";
-        var locationText = selectedRace?.Location ?? "n/a";
-        var startText = selectedSession.StartTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm zzz") ?? "n/a";
-        var endText = selectedSession.EndTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm zzz") ?? "n/a";
+        var grandPrixText = selectedRace?.GrandPrixName ?? "N/A";
+        var locationText = selectedRace?.Location ?? "N/A";
+        var startText = selectedSession.StartTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm zzz") ?? "N/A";
+        var endText = selectedSession.EndTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm zzz") ?? "N/A";
         return string.Join(
             Environment.NewLine,
             "Session Information",
@@ -1149,8 +1149,8 @@ public sealed class TerminalApp
         {
             "Race Results",
             string.Empty,
-            $"Season: {selectedSeason?.ToString() ?? "n/a"}",
-            $"Grand Prix: {selectedRace?.GrandPrixName ?? "n/a"}",
+            $"Season: {selectedSeason?.ToString() ?? "N/A"}",
+            $"Grand Prix: {selectedRace?.GrandPrixName ?? "N/A"}",
             string.Empty,
             "Pos  Driver                    Team",
             "---  ------------------------  -----------------------"
@@ -1173,8 +1173,8 @@ public sealed class TerminalApp
         {
             "Driver Championship Standings",
             string.Empty,
-            $"Season: {selectedSeason?.ToString() ?? "n/a"}",
-            $"After: {selectedRace?.GrandPrixName ?? "selected race"}",
+            $"Season: {selectedSeason?.ToString() ?? "N/A"}",
+            $"After: {selectedRace?.GrandPrixName ?? "Selected Race"}",
             string.Empty,
             "Pos  Driver                    Team                     Points",
             "---  ------------------------  -----------------------  ------"
@@ -1197,8 +1197,8 @@ public sealed class TerminalApp
         {
             "Constructor Championship Standings",
             string.Empty,
-            $"Season: {selectedSeason?.ToString() ?? "n/a"}",
-            $"After: {selectedRace?.GrandPrixName ?? "selected race"}",
+            $"Season: {selectedSeason?.ToString() ?? "N/A"}",
+            $"After: {selectedRace?.GrandPrixName ?? "Selected Race"}",
             string.Empty,
             "Pos  Team                     Points",
             "---  -----------------------  ------"
@@ -1236,10 +1236,10 @@ public sealed class TerminalApp
             $"Average Track Temp: {avgTrack:0.0} C",
             $"Rainy Samples: {rainySamples}",
             string.Empty,
-            $"Latest Sample: {latest.Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "n/a"}",
-            $"Latest Air Temp: {(latest.AirTemperature.HasValue ? latest.AirTemperature.Value.ToString("0.0") : "n/a")}",
-            $"Latest Track Temp: {(latest.TrackTemperature.HasValue ? latest.TrackTemperature.Value.ToString("0.0") : "n/a")}",
-            $"Latest Rainfall: {(latest.Rainfall.HasValue ? latest.Rainfall.Value.ToString("0.0") : "n/a")}");
+            $"Latest Sample: {latest.Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "N/A"}",
+            $"Latest Air Temp: {(latest.AirTemperature.HasValue ? latest.AirTemperature.Value.ToString("0.0") : "N/A")}",
+            $"Latest Track Temp: {(latest.TrackTemperature.HasValue ? latest.TrackTemperature.Value.ToString("0.0") : "N/A")}",
+            $"Latest Rainfall: {(latest.Rainfall.HasValue ? latest.Rainfall.Value.ToString("0.0") : "N/A")}");
     }
 
     private static string BuildPitStopsSummaryText(IReadOnlyList<F1.Core.Models.PitStop> pitStops)
@@ -1267,7 +1267,7 @@ public sealed class TerminalApp
             "Pit Stop Summary",
             string.Empty,
             $"Total Pit Events: {pitStops.Count}",
-            fastest is null ? "Fastest Pit: n/a" : $"Fastest Pit: {FormatDriverNameOnly(fastest.DriverName)} in {fastest.PitDuration:0.000}s",
+            fastest is null ? "Fastest Pit: N/A" : $"Fastest Pit: {FormatDriverNameOnly(fastest.DriverName)} in {fastest.PitDuration:0.000}s",
             string.Empty,
             "Driver Pit Stop Counts:",
             "Driver                  Team                   Stops",
@@ -1331,12 +1331,12 @@ public sealed class TerminalApp
 
     private static string BuildSessionDetailShortcutsText()
     {
-        return "[1-4] Tab  [Left/Right] Tab  [Up/Down] Scroll  [Esc] Back  [Q] Quit";
+        return "[1-4][Left/Right] Tab  [Up/Down] Scroll  [Esc] Back  [Q] Quit";
     }
 
     private static string BuildRaceHubShortcutsText()
     {
-        return "[1-3] Tab  [Left/Right] Tab  [Up/Down] Scroll  [Enter] Session Detail  [Esc] Back  [Q] Quit";
+        return "[1-3][Left/Right] Tab  [Up/Down] Scroll  [Enter] Session Detail  [Esc] Back  [Q] Quit";
     }
 
     private static bool ShouldQuit(Key key, int keyValue)
