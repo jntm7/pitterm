@@ -10,7 +10,7 @@ var environmentName = Environment.GetEnvironmentVariable(StartupKeys.Environment
     ?? StartupKeys.ProductionEnvironmentName;
 var configuration = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
     .AddJsonFile($"appsettings.{environmentName}.json", optional: true, reloadOnChange: false)
     .AddEnvironmentVariables(prefix: StartupKeys.EnvironmentVariablesPrefix)
     .Build();
