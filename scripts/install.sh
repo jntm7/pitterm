@@ -86,10 +86,31 @@ esac
 rid="${os_part}-${arch_part}"
 
 api_base="https://api.github.com/repos/${REPO}/releases"
+
+fetch_json() {
+  local url="$1"
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" "$url"
+  else
+    curl -fsSL "$url"
+  fi
+}
+
 if [[ "$VERSION" == "latest" ]]; then
-  release_json="$(curl -fsSL "${api_base}/latest")"
+  if ! release_json="$(fetch_json "${api_base}/latest")"; then
+    echo "Failed to fetch latest release from ${REPO}." >&2
+    echo "Possible causes:" >&2
+    echo "  - No GitHub Releases published yet" >&2
+    echo "  - Repository is private (set GITHUB_TOKEN)" >&2
+    echo "  - Repo or branch name is incorrect" >&2
+    exit 1
+  fi
 else
-  release_json="$(curl -fsSL "${api_base}/tags/${VERSION}")"
+  if ! release_json="$(fetch_json "${api_base}/tags/${VERSION}")"; then
+    echo "Failed to fetch release tag ${VERSION} from ${REPO}." >&2
+    echo "Make sure the tag exists and has release assets uploaded." >&2
+    exit 1
+  fi
 fi
 
 tag="$(printf '%s' "$release_json" | python3 -c 'import sys,json; print(json.load(sys.stdin)["tag_name"])')"
@@ -107,7 +128,12 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 archive_path="${tmp_dir}/${asset_name}"
 echo "Downloading ${asset_name}..."
-curl -fL "$download_url" -o "$archive_path"
+if ! curl -fL "$download_url" -o "$archive_path"; then
+  echo "Failed downloading ${asset_name}." >&2
+  echo "Confirm this file exists in release ${tag}:" >&2
+  echo "  ${asset_name}" >&2
+  exit 1
+fi
 
 extract_dir="${tmp_dir}/extract"
 mkdir -p "$extract_dir"

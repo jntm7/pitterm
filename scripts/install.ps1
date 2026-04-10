@@ -22,9 +22,19 @@ $rid = "win-$(Get-ArchPart)"
 $apiBase = "https://api.github.com/repos/$Repo/releases"
 
 if ($Version -eq "latest") {
-    $release = Invoke-RestMethod -Uri "$apiBase/latest"
+    try {
+        $release = Invoke-RestMethod -Uri "$apiBase/latest"
+    }
+    catch {
+        throw "Failed to fetch latest release from $Repo. Ensure at least one GitHub Release exists and is publicly accessible."
+    }
 } else {
-    $release = Invoke-RestMethod -Uri "$apiBase/tags/$Version"
+    try {
+        $release = Invoke-RestMethod -Uri "$apiBase/tags/$Version"
+    }
+    catch {
+        throw "Failed to fetch release tag $Version from $Repo. Ensure the release/tag exists."
+    }
 }
 
 $tag = $release.tag_name
@@ -46,7 +56,12 @@ New-Item -ItemType Directory -Force -Path $extractPath | Out-Null
 
 try {
     Write-Host "Downloading $assetName..."
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath
+    try {
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath
+    }
+    catch {
+        throw "Failed downloading $assetName. Confirm the asset exists in release $tag."
+    }
 
     Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
 
