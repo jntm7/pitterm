@@ -171,23 +171,28 @@ public sealed class TerminalApp
         headerBar.Add(headerLine1, headerLine2, headerLine3);
 
         // Panes
-        const int leftPanePercent = 50;
-
         var leftPane = new FrameView("[ Seasons ]")
         {
             X = 0, Y = headerHeight,
-            Width  = Dim.Percent(leftPanePercent),
+            Width  = Dim.Percent(50),
             Height = Dim.Fill() - 3
         };
         leftPane.ColorScheme = panelScheme;
 
         var rightPane = new FrameView("[ — ]")
         {
-            X = Pos.Percent(leftPanePercent), Y = headerHeight,
-            Width  = Dim.Percent(100 - leftPanePercent),
+            X = Pos.Percent(50), Y = headerHeight,
+            Width  = Dim.Percent(50),
             Height = Dim.Fill() - 3
         };
         rightPane.ColorScheme = panelScheme;
+
+        void SetPaneRatio(int leftPercent)
+        {
+            leftPane.Width  = Dim.Percent(leftPercent);
+            rightPane.X     = Pos.Percent(leftPercent);
+            rightPane.Width = Dim.Percent(100 - leftPercent);
+        }
 
         // Left Pane
         var seasonListView = new ListView(new List<string>())
@@ -213,7 +218,7 @@ public sealed class TerminalApp
             "  Weather",
             "  Pit Stops",
             "  Driver Standings",
-            "  Constructor Stndgs"
+            "  Constructor Standings"
         };
         var detailTabListView = new ListView(hubTabItems)
         {
@@ -383,6 +388,7 @@ public sealed class TerminalApp
 
         void GoToSeasonsScreen()
         {
+            SetPaneRatio(50);
             seasonListView.Visible    = true;
             raceListView.Visible      = false;
             detailTabListView.Visible = false;
@@ -398,6 +404,7 @@ public sealed class TerminalApp
 
         void GoToRacesScreen(int season)
         {
+            SetPaneRatio(50);
             seasonListView.Visible    = false;
             raceListView.Visible      = true;
             detailTabListView.Visible = false;
@@ -413,6 +420,7 @@ public sealed class TerminalApp
 
         void GoToRaceSessionsScreen(string grandPrixName)
         {
+            SetPaneRatio(50);
             sessionListView.Visible  = true;
             rightContentView.Visible = false;
             rightPane.Title = $"[ {Truncate(grandPrixName, 44)} ]";
@@ -423,6 +431,7 @@ public sealed class TerminalApp
 
         void GoToDetailHubScreen(F1.Core.Models.Session session, DetailHubTab tab)
         {
+            SetPaneRatio(30);
             seasonListView.Visible    = false;
             raceListView.Visible      = false;
             detailTabListView.Visible = true;
@@ -438,6 +447,7 @@ public sealed class TerminalApp
 
         void ReturnFromHubToSessions()
         {
+            SetPaneRatio(50);
             detailTabListView.Visible = false;
             raceListView.Visible      = true;
             leftPane.Title = $"[ Races — {stateStore.Current.SelectedSeason?.ToString() ?? "N/A"} ]";
@@ -634,6 +644,7 @@ public sealed class TerminalApp
             if (args.KeyEvent.Key == Key.Esc)
             {
                 args.Handled = true;
+                SetPaneRatio(50);
                 sessionListView.Visible = false;
                 rightPane.Title = "[ Select a race → ]";
                 RebuildShortcutBar(RacesShortcuts());
