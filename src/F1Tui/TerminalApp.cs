@@ -9,7 +9,7 @@ namespace F1Tui;
 
 public sealed class TerminalApp
 {
-    // Unified tab enum covering both session detail and standings views.
+    // Enum
     private enum DetailHubTab
     {
         SessionInfo          = 0,
@@ -68,17 +68,11 @@ public sealed class TerminalApp
 
         Application.Init();
 
-        // ── Color schemes ────────────────────────────────────────────────────────
-        //
-        // FIX: Terminal.Gui ListView draws the selected row using ColorScheme.Focus
-        // when the list has keyboard focus.  Previously Focus = White/Black matched
-        // Normal exactly, so the highlight was invisible.  Black/BrightRed gives a
-        // clear F1-themed selection indicator on every list in the app.
-        //
+        // Color Schemes
         var listScheme = new ColorScheme
         {
             Normal    = Application.Driver.MakeAttribute(Color.White,     Color.Black),
-            Focus     = Application.Driver.MakeAttribute(Color.Black,     Color.BrightRed),  // ← selected row
+            Focus     = Application.Driver.MakeAttribute(Color.Black,     Color.BrightRed),
             HotNormal = Application.Driver.MakeAttribute(Color.BrightRed, Color.Black),
             HotFocus  = Application.Driver.MakeAttribute(Color.Black,     Color.BrightRed),
             Disabled  = Application.Driver.MakeAttribute(Color.Gray,      Color.Black)
@@ -93,7 +87,7 @@ public sealed class TerminalApp
             Disabled  = Application.Driver.MakeAttribute(Color.Gray,      Color.Black)
         };
 
-        // FrameView borders: white/black body, BrightRed for title text (HotNormal).
+        // Panel Scheme
         var panelScheme = new ColorScheme
         {
             Normal    = Application.Driver.MakeAttribute(Color.White,     Color.Black),
@@ -112,7 +106,7 @@ public sealed class TerminalApp
             Disabled  = Application.Driver.MakeAttribute(Color.Gray,      Color.Black)
         };
 
-        // Key badge in the shortcut bar: black on red — the F1 red-flag look.
+        // Shortcut Key Scheme
         var shortcutKeyScheme = new ColorScheme
         {
             Normal    = Application.Driver.MakeAttribute(Color.Black, Color.BrightRed),
@@ -131,72 +125,87 @@ public sealed class TerminalApp
             Disabled  = Application.Driver.MakeAttribute(Color.Gray,  Color.Black)
         };
 
-        // ── Root window — empty string removes the title from the frame border ────
+        // Root Window
         var top = Application.Top;
         top.ColorScheme = darkScheme;
 
-        var window = new Window(string.Empty)
+        // Header
+        const int headerContentHeight = 3;
+        const int headerHeight = headerContentHeight + 2;
+
+        var appNameScheme = new ColorScheme
+        {
+            Normal    = Application.Driver.MakeAttribute(Color.BrightRed, Color.Black),
+            Focus     = Application.Driver.MakeAttribute(Color.BrightRed, Color.Black),
+            HotNormal = Application.Driver.MakeAttribute(Color.BrightRed, Color.Black),
+            HotFocus  = Application.Driver.MakeAttribute(Color.BrightRed, Color.Black),
+            Disabled  = Application.Driver.MakeAttribute(Color.BrightRed, Color.Black)
+        };
+
+        var headerBar = new FrameView("")
         {
             X = 0, Y = 0,
             Width  = Dim.Fill(),
-            Height = Dim.Fill()
+            Height = headerHeight
         };
-        window.ColorScheme = darkScheme;
+        headerBar.ColorScheme = panelScheme;
 
-        // ── Layout ───────────────────────────────────────────────────────────────
-        //
-        // Screens 1 & 2  (Seasons / Races + Sessions)
-        //
-        //   ┌─ leftPane (28 cols) ─┐  ┌─ rightPane (fills rest) ────────────────┐
-        //   │ season/race list     │  │ empty  →  session list after race Enter │
-        //   └──────────────────────┘  └────────────────────────────────────────-┘
-        //
-        // Screen 3  (Detail Hub — after selecting a session)
-        //
-        //   ┌─ leftPane ───────────┐  ┌─ rightPane ────────────────────────────┐
-        //   │  Session Info        │  │  scrollable content for selected tab   │
-        //   │  Race Results        │  │                                        │
-        //   │  Weather             │  │                                        │
-        //   │  Pit Stops           │  │                                        │
-        //   │  Driver Standings    │  │                                        │
-        //   │  Constructor Stndgs  │  │                                        │
-        //   └──────────────────────┘  └────────────────────────────────────────┘
-        //
-        const int leftPaneWidth = 28;
+        var headerLine1 = new Label("_______                       _______")
+        {
+            X = Pos.Center(), Y = 0, Width = 42, Height = 1
+        };
+        headerLine1.ColorScheme = appNameScheme;
+
+        var headerLine2 = new Label(" _\\=.o.=/_        PitTerm      _\\=.o.=/_")
+        {
+            X = Pos.Center(), Y = 1, Width = 45, Height = 1
+        };
+        headerLine2.ColorScheme = appNameScheme;
+
+        var headerLine3 = new Label("|_|_____|_|        jntm7      |_|_____|_|")
+        {
+            X = Pos.Center(), Y = 2, Width = 45, Height = 1
+        };
+        headerLine3.ColorScheme = appNameScheme;
+
+        headerBar.Add(headerLine1, headerLine2, headerLine3);
+
+        // Panes
+        const int leftPanePercent = 50;
 
         var leftPane = new FrameView("[ Seasons ]")
         {
-            X = 0, Y = 0,
-            Width  = leftPaneWidth,
-            Height = Dim.Fill() - 4   // leave room for the footer
+            X = 0, Y = headerHeight,
+            Width  = Dim.Percent(leftPanePercent),
+            Height = Dim.Fill() - 3
         };
         leftPane.ColorScheme = panelScheme;
 
         var rightPane = new FrameView("[ — ]")
         {
-            X = leftPaneWidth, Y = 0,
-            Width  = Dim.Fill(),
-            Height = Dim.Fill() - 4
+            X = Pos.Percent(leftPanePercent), Y = headerHeight,
+            Width  = Dim.Percent(100 - leftPanePercent),
+            Height = Dim.Fill() - 3
         };
         rightPane.ColorScheme = panelScheme;
 
-        // ── Left pane: one list visible at a time ─────────────────────────────────
+        // Left Pane
         var seasonListView = new ListView(new List<string>())
         {
-            X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill()
+            X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill() - 1
         };
         seasonListView.ColorScheme = listScheme;
         leftPane.Add(seasonListView);
 
         var raceListView = new ListView(new List<string>())
         {
-            X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(),
+            X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill() - 1,
             Visible = false
         };
         raceListView.ColorScheme = listScheme;
         leftPane.Add(raceListView);
 
-        // Vertical tab list shown in Screen 3.
+        // Hub Tab List
         var hubTabItems = new List<string>
         {
             "  Session Info",
@@ -208,58 +217,50 @@ public sealed class TerminalApp
         };
         var detailTabListView = new ListView(hubTabItems)
         {
-            X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(),
+            X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill() - 1,
             Visible = false
         };
         detailTabListView.ColorScheme = listScheme;
         leftPane.Add(detailTabListView);
 
-        // ── Right pane: one content view at a time ───────────────────────────────
-        // Session list — appears on the right after the user opens a race.
+// Right Pane
         var sessionListView = new ListView(new List<string>())
         {
-            X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(),
+            X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill() - 1,
             Visible = false
         };
         sessionListView.ColorScheme = listScheme;
         rightPane.Add(sessionListView);
 
-        // Scrollable text content for the Detail Hub.
+        // Content View
         var rightContentView = new TextView
         {
-            X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(),
+            X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill() - 1,
             ReadOnly = true, WordWrap = false,
             Visible = false, Text = string.Empty
         };
         rightContentView.ColorScheme = darkScheme;
         rightPane.Add(rightContentView);
 
-        // ── Footer ───────────────────────────────────────────────────────────────
-        var footerFrame = new FrameView("[ Status ]")
+        // Footer
+        var footerFrame = new FrameView("")
         {
-            X = 0, Y = Pos.AnchorEnd(4),
-            Width = Dim.Fill(), Height = 4
+            X = 0, Y = Pos.AnchorEnd(3),
+            Width = Dim.Fill(), Height = 3
         };
         footerFrame.ColorScheme = footerScheme;
 
-        var statusLine = new Label("Initializing...")
-        {
-            X = 1, Y = 0, Width = Dim.Fill() - 2, Height = 1
-        };
-        statusLine.ColorScheme = footerScheme;
-
-        // Shortcut bar: rebuilt on every screen transition as coloured key+desc pairs.
+        // Shortcut Bar
         var shortcutBar = new View
         {
-            X = 0, Y = 1, Width = Dim.Fill(), Height = 1
+            X = 0, Y = 0, Width = Dim.Fill(), Height = 1
         };
         shortcutBar.ColorScheme = footerScheme;
 
-        footerFrame.Add(statusLine, shortcutBar);
-        top.Add(window);
-        window.Add(leftPane, rightPane, footerFrame);
+        footerFrame.Add(shortcutBar);
+        top.Add(headerBar, leftPane, rightPane, footerFrame);
 
-        // ── Mutable state ────────────────────────────────────────────────────────
+        // Mutable State
         var seasons            = new List<F1.Core.Models.Season>();
         var raceModels         = new List<F1.Core.Models.Race>();
         var sessionModels      = new List<F1.Core.Models.Session>();
@@ -272,11 +273,10 @@ public sealed class TerminalApp
         F1.Core.Models.Session? activeSession = null;
         var selectedDetailTab = DetailHubTab.SessionInfo;
 
-        // All hub content is stored as a flat line list; viewport slices it.
         var contentLines  = new List<string>();
         var contentOffset = 0;
 
-        // ── Helper: shortcut bar ─────────────────────────────────────────────────
+        // Shortcut Bar Helper
         void RebuildShortcutBar(IReadOnlyList<(string key, string desc)> shortcuts)
         {
             foreach (var v in shortcutBar.Subviews.ToList())
@@ -302,7 +302,7 @@ public sealed class TerminalApp
             shortcutBar.SetNeedsDisplay();
         }
 
-        // ── Helper: content viewport ─────────────────────────────────────────────
+        // Content Viewport Helper
         void RenderContentViewport()
         {
             if (contentLines.Count == 0) { rightContentView.Text = string.Empty; return; }
@@ -323,12 +323,7 @@ public sealed class TerminalApp
             _                                 => "[ — ]"
         };
 
-        // ── Helper: hub content loader ───────────────────────────────────────────
-        //
-        // Runs the data fetch on a background thread so the UI stays responsive,
-        // then marshals the resulting lines back to the main loop.  A captured
-        // tab value guards against stale results when the user switches quickly.
-        //
+        // Hub Content Loader
         void StartHubContentLoad(DetailHubTab tab)
         {
             var capturedTab     = tab;
@@ -375,7 +370,7 @@ public sealed class TerminalApp
 
                 Application.MainLoop?.Invoke(() =>
                 {
-                    if (selectedDetailTab != capturedTab) return;  // user moved on
+                    if (selectedDetailTab != capturedTab) return;
                     contentLines  = lines;
                     contentOffset = 0;
                     RenderContentViewport();
@@ -384,7 +379,7 @@ public sealed class TerminalApp
             }, cancellationToken);
         }
 
-        // ── Screen transitions ───────────────────────────────────────────────────
+        // Screen Transitions
 
         void GoToSeasonsScreen()
         {
@@ -410,17 +405,14 @@ public sealed class TerminalApp
 
             sessionListView.Visible  = false;
             rightContentView.Visible = false;
-            rightPane.Title = "[ Select a race → ]";
+            rightPane.Title = "[ Select a Race ]";
 
             RebuildShortcutBar(RacesShortcuts());
             raceListView.SetFocus();
         }
 
-        // Called after Enter on a race.  Sessions load in the right pane and
-        // focus moves there so the user can immediately make a selection.
         void GoToRaceSessionsScreen(string grandPrixName)
         {
-            // Left stays on the race list — no visibility change needed.
             sessionListView.Visible  = true;
             rightContentView.Visible = false;
             rightPane.Title = $"[ {Truncate(grandPrixName, 44)} ]";
@@ -429,15 +421,13 @@ public sealed class TerminalApp
             sessionListView.SetFocus();
         }
 
-        // Called after Enter on a session.  Left pane switches to the vertical
-        // tab list; right pane shows the first tab's content.
         void GoToDetailHubScreen(F1.Core.Models.Session session, DetailHubTab tab)
         {
             seasonListView.Visible    = false;
             raceListView.Visible      = false;
             detailTabListView.Visible = true;
             detailTabListView.SelectedItem = (int)tab;
-            leftPane.Title = $"[ {Truncate(session.SessionName, leftPaneWidth - 4)} ]";
+            leftPane.Title = $"[ {session.SessionName} ]";
 
             sessionListView.Visible  = false;
             rightContentView.Visible = true;
@@ -446,7 +436,6 @@ public sealed class TerminalApp
             detailTabListView.SetFocus();
         }
 
-        // Esc from the hub returns to the races+sessions split.
         void ReturnFromHubToSessions()
         {
             detailTabListView.Visible = false;
@@ -461,13 +450,13 @@ public sealed class TerminalApp
             sessionListView.SetFocus();
         }
 
-        // ── Seasons data init ─────────────────────────────────────────────────────
+        // Seasons Init
         var currentYear = DateTime.UtcNow.Year;
         seasons = Enumerable.Range(2023, Math.Max(currentYear - 2023 + 1, 1))
             .OrderByDescending(y => y)
             .Select(y => new F1.Core.Models.Season(y))
             .ToList();
-        seasonListView.SetSource(seasons.Select(s => s.Year.ToString()).ToList());
+        seasonListView.SetSource(seasons.Select(s => $"{s.Year} Season").ToList());
 
         stateStore.Update(state =>
             AppStateTransitions.ToSeasons(state, null, BuildSeasonsStatusMessage(null)));
@@ -490,33 +479,28 @@ public sealed class TerminalApp
                         .OrderByDescending(y => y)
                         .Select(y => new F1.Core.Models.Season(y))
                         .ToList();
-                    var mergedNames  = merged.Select(s => s.Year.ToString()).ToList();
-                    var currentNames = seasons.Select(s => s.Year.ToString()).ToList();
+                    var mergedNames  = merged.Select(s => $"{s.Year} Season").ToList();
+                    var currentNames = seasons.Select(s => $"{s.Year} Season").ToList();
                     if (mergedNames.SequenceEqual(currentNames)) return;
                     seasons = merged;
                     seasonListView.SetSource(mergedNames);
-                    statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+                    
                 });
             }
             catch { }
         }, cancellationToken);
 
         GoToSeasonsScreen();
-        statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+        
 
-        // ── Global quit ──────────────────────────────────────────────────────────
+        // Global Quit
         top.KeyPress += args =>
         {
             if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
             { args.Handled = true; Application.RequestStop(); }
         };
-        window.KeyPress += args =>
-        {
-            if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
-            { args.Handled = true; Application.RequestStop(); }
-        };
 
-        // ── Season list ──────────────────────────────────────────────────────────
+        // Season List Handlers
         seasonListView.SelectedItemChanged += args =>
         {
             if (args.Item < 0 || args.Item >= seasons.Count) return;
@@ -530,7 +514,7 @@ public sealed class TerminalApp
                 ActiveScreen          = "Seasons",
                 StatusMessage         = BuildSeasonsStatusMessage(year)
             });
-            statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+            
         };
 
         seasonListView.KeyPress += async args =>
@@ -544,14 +528,13 @@ public sealed class TerminalApp
             if (seasonListView.SelectedItem < 0 || seasonListView.SelectedItem >= seasons.Count) return;
             var season = seasons[seasonListView.SelectedItem].Year;
 
-            statusLine.Text = $"Loading races for {season}...";
             Application.Refresh();
 
             raceModels = (await raceService.GetRacesBySeasonAsync(season, cancellationToken)).ToList();
             raceRowsAreData = raceModels.Count > 0;
             raceRows = raceRowsAreData
                 ? raceModels.OrderBy(r => r.RoundNumber)
-                    .Select(r => $"R{r.RoundNumber,-2}  {Truncate(r.GrandPrixName, 22)}")
+                    .Select(r => $"R{r.RoundNumber,-2}  {r.GrandPrixName}")
                     .ToList()
                 : ["No race data available yet."];
 
@@ -559,12 +542,12 @@ public sealed class TerminalApp
 
             stateStore.Update(state =>
                 AppStateTransitions.ToRaces(state, season, null, BuildRaceStatusMessage(season, null)));
-            statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+            
 
             GoToRacesScreen(season);
         };
 
-        // ── Race list ────────────────────────────────────────────────────────────
+        // Race List Handlers
         raceListView.SelectedItemChanged += args =>
         {
             if (stateStore.Current.SelectedSeason is null) return;
@@ -577,7 +560,7 @@ public sealed class TerminalApp
                 SelectedSessionName   = null,
                 StatusMessage         = BuildRaceStatusMessage(state.SelectedSeason, race.GrandPrixName)
             });
-            statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+            
         };
 
         raceListView.KeyPress += async args =>
@@ -591,7 +574,7 @@ public sealed class TerminalApp
                 stateStore.Update(state =>
                     AppStateTransitions.ToSeasons(state, state.SelectedSeason,
                         BuildSeasonsStatusMessage(state.SelectedSeason)));
-                statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+                
                 GoToSeasonsScreen();
                 return;
             }
@@ -600,10 +583,9 @@ public sealed class TerminalApp
             args.Handled = true;
 
             if (raceListView.SelectedItem < 0 || raceListView.SelectedItem >= raceModels.Count) return;
-            if (!raceRowsAreData) { statusLine.Text = "Race data is still loading."; return; }
+            if (!raceRowsAreData) return;
 
             activeRace = raceModels[raceListView.SelectedItem];
-            statusLine.Text = $"Loading sessions for {activeRace.GrandPrixName}...";
             Application.Refresh();
 
             sessionModels = (await sessionService.GetSessionsByRaceAsync(
@@ -613,7 +595,7 @@ public sealed class TerminalApp
             sessionRows = sessionRowsAreData
                 ? sessionModels
                     .Select(s =>
-                        $"{Truncate(s.SessionName, 16),-16}  {s.StartTime?.ToLocalTime().ToString("MM-dd HH:mm") ?? "TBD"}")
+                        $"{s.SessionName,-28}  {s.StartTime?.ToLocalTime().ToString("MMM dd") ?? "TBD"}")
                     .ToList()
                 : ["No session data available yet."];
 
@@ -624,12 +606,12 @@ public sealed class TerminalApp
                     activeRace.GrandPrixName,
                     BuildSessionsStatusMessage(state.SelectedSeason, activeRace.RoundNumber,
                         activeRace.GrandPrixName, null)));
-            statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+            
 
             GoToRaceSessionsScreen(activeRace.GrandPrixName);
         };
 
-        // ── Session list (right pane, Screen 2) ──────────────────────────────────
+        // Session List Handlers
         sessionListView.SelectedItemChanged += args =>
         {
             if (args.Item < 0 || args.Item >= sessionRows.Count) return;
@@ -641,7 +623,7 @@ public sealed class TerminalApp
                     state.SelectedSeason, activeRace?.RoundNumber,
                     activeRace?.GrandPrixName, name)
             });
-            statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+            
         };
 
         sessionListView.KeyPress += async args =>
@@ -652,8 +634,6 @@ public sealed class TerminalApp
             if (args.KeyEvent.Key == Key.Esc)
             {
                 args.Handled = true;
-                // Return focus to the race list without clearing session data, so
-                // pressing Enter again on the same race is instant.
                 sessionListView.Visible = false;
                 rightPane.Title = "[ Select a race → ]";
                 RebuildShortcutBar(RacesShortcuts());
@@ -665,7 +645,7 @@ public sealed class TerminalApp
             args.Handled = true;
 
             if (sessionListView.SelectedItem < 0 || sessionListView.SelectedItem >= sessionModels.Count) return;
-            if (!sessionRowsAreData) { statusLine.Text = "Session data is still loading."; return; }
+            if (!sessionRowsAreData) return;
 
             activeSession     = sessionModels[sessionListView.SelectedItem];
             selectedDetailTab = DetailHubTab.SessionInfo;
@@ -674,17 +654,13 @@ public sealed class TerminalApp
                 AppStateTransitions.ToSessionDetail(state, activeSession.SessionName,
                     BuildSessionsStatusMessage(state.SelectedSeason, activeSession.RoundNumber,
                         state.SelectedGrandPrixName, activeSession.SessionName)));
-            statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+            
 
             GoToDetailHubScreen(activeSession, selectedDetailTab);
             StartHubContentLoad(selectedDetailTab);
         };
 
-        // ── Detail hub tab list (left pane, Screen 3) ────────────────────────────
-        //
-        // SelectedItemChanged cannot be async, so we fire the content load from
-        // there and let the background Task marshal the result back to the UI.
-        //
+        // Hub Tab Handlers
         detailTabListView.SelectedItemChanged += args =>
         {
             selectedDetailTab = (DetailHubTab)args.Item;
@@ -708,12 +684,11 @@ public sealed class TerminalApp
                         state.SelectedSeason, activeRace?.RoundNumber,
                         activeRace?.GrandPrixName, activeSession?.SessionName)
                 });
-                statusLine.Text = stateStore.Current.StatusMessage ?? "Ready";
+                
                 ReturnFromHubToSessions();
                 return;
             }
 
-            // Enter shifts focus to the scrollable content area.
             if (args.KeyEvent.Key == Key.Enter)
             {
                 args.Handled = true;
@@ -721,7 +696,7 @@ public sealed class TerminalApp
             }
         };
 
-        // ── Right content view — scrolling (Screen 3) ────────────────────────────
+        // Content Scroll
         rightContentView.KeyPress += args =>
         {
             if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
@@ -733,7 +708,6 @@ public sealed class TerminalApp
             if (args.KeyEvent.Key == Key.CursorUp)
             { args.Handled = true; contentOffset--; RenderContentViewport(); }
 
-            // Esc or Tab returns focus to the tab list on the left.
             if (args.KeyEvent.Key is Key.Esc or Key.Tab)
             { args.Handled = true; detailTabListView.SetFocus(); }
         };
@@ -742,9 +716,7 @@ public sealed class TerminalApp
         Application.Shutdown();
     }
 
-    // ── Async data loaders ───────────────────────────────────────────────────────
-    // Each method is called from Task.Run and may freely use await.
-    // UI writes must go through Application.MainLoop.Invoke (handled by the caller).
+    // Data Loaders
 
     private async Task<List<string>> LoadRaceResultsLinesAsync(
         int? season, F1.Core.Models.Race? race,
@@ -795,7 +767,7 @@ public sealed class TerminalApp
             : SplitLines(BuildConstructorStandingsTableText(season, race, standings));
     }
 
-    // ── Shortcut definitions ─────────────────────────────────────────────────────
+    // Shortcut Definitions
 
     private static IReadOnlyList<(string, string)> SeasonsShortcuts() =>
     [
@@ -825,7 +797,7 @@ public sealed class TerminalApp
         ("Q",     "Quit")
     ];
 
-    // ── Status message builders ──────────────────────────────────────────────────
+    // Status Messages
 
     private string BuildSeasonsStatusMessage(int? season) =>
         season is null
@@ -847,7 +819,7 @@ public sealed class TerminalApp
         return $"Season {season?.ToString() ?? "N/A"}  |  R{roundText}  |  {grandPrix}  |  {sessionName}";
     }
 
-    // ── Content / table builders ─────────────────────────────────────────────────
+    // Content Builders
 
     private static string BuildSessionInfoText(
         int? season, F1.Core.Models.Race? race, F1.Core.Models.Session session)
@@ -1004,12 +976,13 @@ public sealed class TerminalApp
         return string.Join(Environment.NewLine,
             new[] { "+" + new string(borderChar,  width + 2) + "+",
                     $"| {title.PadRight(width)} |",
-                    "+" + new string(dividerChar, width + 2) + "+" }
+                    "+" + new string(dividerChar, width + 2) + "+",
+                    $"| {string.Empty.PadRight(width)} |" }
             .Concat(lines.Select(l => $"| {l.PadRight(width)} |"))
             .Append("+" + new string(borderChar, width + 2) + "+"));
     }
 
-    // ── Misc utilities ───────────────────────────────────────────────────────────
+    // Utilities
 
     private static string FormatDriverName(string? name) =>
         string.IsNullOrWhiteSpace(name) ? "Unknown Driver" : name;
