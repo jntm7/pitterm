@@ -14,9 +14,6 @@ jobs:
           - os: macos-latest
             rid: osx-arm64
             artifact: pitterm-osx-arm64
-          - os: macos-13
-            rid: osx-x64
-            artifact: pitterm-osx-x64
           - os: ubuntu-latest
             rid: linux-x64
             artifact: pitterm-linux-x64
