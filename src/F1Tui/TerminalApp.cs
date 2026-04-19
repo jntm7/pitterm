@@ -431,7 +431,7 @@ public sealed class TerminalApp
 
         void GoToDetailHubScreen(F1.Core.Models.Session session, DetailHubTab tab)
         {
-            SetPaneRatio(30);
+            SetPaneRatio(35);
             seasonListView.Visible    = false;
             raceListView.Visible      = false;
             detailTabListView.Visible = true;
@@ -835,8 +835,8 @@ public sealed class TerminalApp
     private static string BuildSessionInfoText(
         int? season, F1.Core.Models.Race? race, F1.Core.Models.Session session)
     {
-        return BuildAsciiPanel("Session Information",
-        [
+        var lines = new List<string>
+        {
             $"Season:     {season?.ToString() ?? "N/A"}",
             $"Round:      {session.RoundNumber}",
             $"Grand Prix: {race?.GrandPrixName ?? "N/A"}",
@@ -844,7 +844,8 @@ public sealed class TerminalApp
             $"Session:    {session.SessionName}",
             $"Start:      {session.StartTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm zzz") ?? "N/A"}",
             $"End:        {session.EndTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm zzz") ?? "N/A"}"
-        ]);
+        };
+        return FormatSection("Session Information", lines);
     }
 
     private static string BuildRaceResultsTableText(
@@ -856,12 +857,12 @@ public sealed class TerminalApp
             $"Season: {season?.ToString() ?? "N/A"}",
             $"Grand Prix: {race?.GrandPrixName ?? "N/A"}",
             string.Empty,
-            "Pos  Driver                    Team",
-            "---  ------------------------  -----------------------"
+            "Pos  Driver               Team",
+            new string('─', 42)
         };
         foreach (var r in results)
-            lines.Add($"{r.Position,3}  {Truncate(r.DriverName, 24),-24}  {Truncate(r.TeamName, 23),-23}");
-        return BuildAsciiPanel("Race Results", lines, "-", "=");
+            lines.Add($"{r.Position,3}  {Truncate(r.DriverName, 20),-20}  {Truncate(r.TeamName, 15),-15}");
+        return FormatSection("Race Results", lines);
     }
 
     private static string BuildDriverStandingsTableText(
@@ -873,12 +874,12 @@ public sealed class TerminalApp
             $"Season: {season?.ToString() ?? "N/A"}",
             $"After:  {race?.GrandPrixName ?? "Selected Race"}",
             string.Empty,
-            "Pos  Driver                    Team                     Points",
-            "---  ------------------------  -----------------------  ------"
+            "Pos  Driver               Team                Points",
+            new string('─', 54)
         };
         foreach (var s in standings)
-            lines.Add($"{s.Position,3}  {Truncate(s.DriverName, 24),-24}  {Truncate(s.TeamName, 23),-23}  {s.Points,6:0}");
-        return BuildAsciiPanel("Driver Championship", lines, "-", "=");
+            lines.Add($"{s.Position,3}  {Truncate(s.DriverName, 20),-20}  {Truncate(s.TeamName, 19),-19}  {s.Points,6:0}");
+        return FormatSection("Driver Championship", lines);
     }
 
     private static string BuildConstructorStandingsTableText(
@@ -890,19 +891,18 @@ public sealed class TerminalApp
             $"Season: {season?.ToString() ?? "N/A"}",
             $"After:  {race?.GrandPrixName ?? "Selected Race"}",
             string.Empty,
-            "Pos  Team                     Points",
-            "---  -----------------------  ------"
+            "Pos  Team                 Points",
+            new string('─', 33)
         };
         foreach (var s in standings)
-            lines.Add($"{s.Position,3}  {Truncate(s.TeamName, 23),-23}  {s.Points,6:0}");
-        return BuildAsciiPanel("Constructor Championship", lines, "-", "=");
+            lines.Add($"{s.Position,3}  {Truncate(s.TeamName, 20),-20}  {s.Points,6:0}");
+        return FormatSection("Constructor Championship", lines);
     }
 
     private static string BuildWeatherSummaryText(IReadOnlyList<F1.Core.Models.WeatherSample> samples)
     {
         if (samples.Count == 0)
-            return BuildAsciiPanel("Weather Summary",
-                ["No weather data available for this session."], "-", "=");
+            return FormatSection("Weather Summary", ["No weather data available for this session."]);
 
         var latest   = samples.OrderByDescending(s => s.Timestamp ?? DateTimeOffset.MinValue).First();
         var avgAir   = samples.Where(s => s.AirTemperature.HasValue)
@@ -911,7 +911,7 @@ public sealed class TerminalApp
             .Select(s => s.TrackTemperature!.Value).DefaultIfEmpty().Average();
         var rainy    = samples.Count(s => (s.Rainfall ?? 0) > 0);
 
-        return BuildAsciiPanel("Weather Summary",
+        return FormatSection("Weather Summary",
         [
             $"Samples:           {samples.Count}",
             $"Avg Air Temp:      {avgAir:0.0} °C",
@@ -922,14 +922,13 @@ public sealed class TerminalApp
             $"Latest Air Temp:   {(latest.AirTemperature.HasValue   ? latest.AirTemperature.Value.ToString("0.0")   : "N/A")}",
             $"Latest Track Temp: {(latest.TrackTemperature.HasValue ? latest.TrackTemperature.Value.ToString("0.0") : "N/A")}",
             $"Latest Rainfall:   {(latest.Rainfall.HasValue         ? latest.Rainfall.Value.ToString("0.0")         : "N/A")}"
-        ], "-", "=");
+        ]);
     }
 
     private static string BuildPitStopsSummaryText(IReadOnlyList<F1.Core.Models.PitStop> pitStops)
     {
         if (pitStops.Count == 0)
-            return BuildAsciiPanel("Pit Stop Summary",
-                ["No pit stop data available for this session."], "-", "=");
+            return FormatSection("Pit Stop Summary", ["No pit stop data available for this session."]);
 
         var fastest = pitStops
             .Where(p => p.PitDuration.HasValue)
@@ -959,38 +958,29 @@ public sealed class TerminalApp
                 ? "Fastest Pit:       N/A"
                 : $"Fastest Pit:       {FormatDriverName(fastest.DriverName)} — {fastest.PitDuration:0.000}s",
             string.Empty,
-            "Driver                  Team                   Stops",
-            "----------------------  ---------------------  -----"
+            "Driver               Team                Stops",
+            new string('─', 48)
         };
 
         lines.AddRange(totalByDriver.Select(item =>
         {
             var m = driverMeta.TryGetValue(item.Driver, out var v)
                 ? v : new { Name = "Unknown", Team = "Unknown" };
-            return $"{Truncate(m.Name, 22),-22}  {Truncate(m.Team, 21),-21}  {item.Count,5}";
+            return $"{Truncate(m.Name, 20),-20}  {Truncate(m.Team, 19),-19}  {item.Count,5}";
         }));
 
-        return BuildAsciiPanel("Pit Stop Summary", lines, "-", "=");
+        return FormatSection("Pit Stop Summary", lines);
     }
 
-    private static string BuildAsciiPanel(
-        string title,
-        IReadOnlyList<string> bodyLines,
-        string border  = "-",
-        string divider = "=")
+    private static string FormatSection(string title, IReadOnlyList<string> lines)
     {
-        var lines       = bodyLines.Count == 0 ? [string.Empty] : bodyLines.ToList();
-        var width       = Math.Max(title.Length, lines.Max(l => l.Length));
-        var borderChar  = string.IsNullOrEmpty(border)  ? '-' : border[0];
-        var dividerChar = string.IsNullOrEmpty(divider) ? '=' : divider[0];
+        var content = lines.Count == 0 ? [string.Empty] : lines.ToList();
+        var width = Math.Max(title.Length, content.Max(l => l.Length));
+        var divider = new string('─', width);
 
         return string.Join(Environment.NewLine,
-            new[] { "+" + new string(borderChar,  width + 2) + "+",
-                    $"| {title.PadRight(width)} |",
-                    "+" + new string(dividerChar, width + 2) + "+",
-                    $"| {string.Empty.PadRight(width)} |" }
-            .Concat(lines.Select(l => $"| {l.PadRight(width)} |"))
-            .Append("+" + new string(borderChar, width + 2) + "+"));
+            new[] { title, divider }
+            .Concat(content));
     }
 
     // Utilities
