@@ -97,6 +97,11 @@ public static class ServiceCollectionExtensions
             var openF1Client = serviceProvider.GetRequiredService<IOpenF1Client>();
             return new LapService(openF1Client);
         });
+        services.AddSingleton<IDriverService>(serviceProvider =>
+        {
+            var openF1Client = serviceProvider.GetRequiredService<IOpenF1Client>();
+            return new DriverService(openF1Client);
+        });
         services.AddSingleton<IAppStateStore, InMemoryAppStateStore>();
         services.AddSingleton<TerminalApp>();
 
