@@ -2,75 +2,34 @@
 
 Cross-platform F1 historical statistics TUI built with C# and .NET.
 
-## Prerequisites
+## Installation
 
-- .NET SDK 10.0+
-- A modern terminal emulator (kitty, alacritty, Windows Terminal, iTerm2)
+Download the latest release for your platform from [Releases](https://github.com/jntm7/pitterm/releases):
 
-### Terminal Support
+| Platform | File |
+|---|---|
+| macOS (Apple Silicon) | `pitterm-osx-arm64.tar.gz` |
+| Linux (x64) | `pitterm-linux-x64.tar.gz` |
+| Windows (x64) | `pitterm-win-x64.zip` |
 
-Recommended Terminals:
+Extract and run — no .NET runtime required.
 
-- macOS: iTerm2, kitty, alacritty
-- Linux: kitty, alacritty, GNOME Terminal
-- Windows: Windows Terminal (PowerShell or pwsh shell)
-
-## Project Structure
-
-- `src/F1Tui` - interactive terminal UI app
-- `src/F1.Core` - domain models and application interfaces
-- `src/F1.Infrastructure` - API clients and persistence adapters
-- `tests/F1.Core.Tests` - unit tests for core logic
-- `tests/F1.Infrastructure.Tests` - infrastructure tests
-
-## Installation (One-Line)
-
-### macOS/Linux
+### macOS / Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jntm7/pitterm/main/scripts/install.sh | bash
+tar -xzf pitterm-osx-arm64.tar.gz
+chmod +x F1Tui
+./F1Tui
 ```
 
-or install a specific version tag:
+### Windows
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/jntm7/pitterm/main/scripts/install.sh | bash -s -- --version v0.1.0
-```
+Extract `pitterm-win-x64.zip`, then run `F1Tui.exe`.
 
-### Windows (PowerShell)
+## Terminal Support
 
-```powershell
-irm https://raw.githubusercontent.com/jntm7/pitterm/main/scripts/install.ps1 | iex
-```
+Recommended terminals:
 
-Install a specific version tag:
-
-```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jntm7/pitterm/main/scripts/install.ps1))) -Version v0.1.0
-```
-
-## Uninstall
-
-### macOS/Linux
-
-If installed to the default location:
-
-```bash
-rm -f "$HOME/.local/bin/pitterm"
-```
-
-If you used a custom install directory, remove that binary path instead.
-
-### Windows (PowerShell)
-
-If installed to the default location:
-
-```powershell
-Remove-Item "$HOME\.local\bin\pitterm.exe" -Force
-```
-
-If you used a custom install directory, remove that binary path instead.
-
-### Optional PATH cleanup
-
-If you added `~/.local/bin` to your PATH only for PitTerm and want to remove it, delete the PATH export line from your shell profile (for example `~/.zshrc` or `~/.bashrc`) and reload the shell.
+- **macOS**: iTerm2, kitty, alacritty
+- **Linux**: kitty, alacritty, GNOME Terminal
+- **Windows**: Windows Terminal (PowerShell or pwsh)
