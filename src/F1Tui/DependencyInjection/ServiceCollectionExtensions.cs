@@ -31,9 +31,7 @@ public static class ServiceCollectionExtensions
         services.AddLogging(logging =>
         {
             logging.ClearProviders();
-            logging.AddConsole();
             logging.SetMinimumLevel(LogLevel.Warning);
-            logging.AddFilter("F1Tui", LogLevel.Information);
             logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
             logging.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
         });

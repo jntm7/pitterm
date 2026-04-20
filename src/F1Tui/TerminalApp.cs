@@ -660,6 +660,12 @@ public sealed class TerminalApp
             if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
             { args.Handled = true; Application.RequestStop(); return; }
 
+            if (args.KeyEvent.Key == Key.Esc)
+            {
+                args.Handled = true;
+                return;
+            }
+
             if (args.KeyEvent.Key == Key.Tab)
             {
                 args.Handled = true;
@@ -853,23 +859,16 @@ public sealed class TerminalApp
             if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
             { args.Handled = true; Application.RequestStop(); return; }
 
+            if (args.KeyEvent.Key == Key.Esc)
+            {
+                args.Handled = true;
+                return;
+            }
+
             if (args.KeyEvent.Key == Key.Tab)
             {
                 args.Handled = true;
                 FocusHomeOppositePane();
-                return;
-            }
-
-            if (args.KeyEvent.Key == Key.Esc)
-            {
-                args.Handled = true;
-                showTeamsOnRight = false;
-                teamListView.Visible = false;
-                sessionListView.Visible = false;
-                rightContentView.Visible = false;
-                rightPane.Title = "[ — ]";
-                RebuildShortcutBar(SeasonsShortcuts());
-                seasonListView.SetFocus();
                 return;
             }
 
@@ -881,7 +880,6 @@ public sealed class TerminalApp
             var year = stateStore.Current.SelectedSeason ?? DateTime.UtcNow.Year;
 
             GoToTeamDetailScreen(selectedTeam, year);
-            return;
         };
 
         teamDriverListView.SelectedItemChanged += args =>
