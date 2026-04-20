@@ -17,7 +17,8 @@ public sealed class TerminalApp
         Weather              = 2,
         PitStops             = 3,
         DriverStandings      = 4,
-        ConstructorStandings = 5
+        ConstructorStandings = 5,
+        TeamsDrivers         = 6
     }
 
     private readonly ISeasonService seasonService;
@@ -28,6 +29,7 @@ public sealed class TerminalApp
     private readonly IConstructorStandingsService constructorStandingsService;
     private readonly IWeatherService weatherService;
     private readonly IPitStopService pitStopService;
+    private readonly IDriverService driverService;
     private readonly IAppStateStore stateStore;
     private readonly IOptions<AppOptions> options;
     private readonly ILogger<TerminalApp> logger;
@@ -41,6 +43,7 @@ public sealed class TerminalApp
         IConstructorStandingsService constructorStandingsService,
         IWeatherService weatherService,
         IPitStopService pitStopService,
+        IDriverService driverService,
         IAppStateStore stateStore,
         IOptions<AppOptions> options,
         ILogger<TerminalApp> logger)
@@ -53,6 +56,7 @@ public sealed class TerminalApp
         this.constructorStandingsService = constructorStandingsService;
         this.weatherService = weatherService;
         this.pitStopService = pitStopService;
+        this.driverService = driverService;
         this.stateStore = stateStore;
         this.options = options;
         this.logger = logger;
@@ -197,14 +201,20 @@ public sealed class TerminalApp
         // Left Pane
         var seasonListView = new ListView(new List<string>())
         {
-            X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill() - 1
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill()
         };
         seasonListView.ColorScheme = listScheme;
         leftPane.Add(seasonListView);
 
         var raceListView = new ListView(new List<string>())
         {
-            X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill() - 1,
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
             Visible = false
         };
         raceListView.ColorScheme = listScheme;
@@ -218,29 +228,54 @@ public sealed class TerminalApp
             "  Weather",
             "  Pit Stops",
             "  Driver Standings",
-            "  Constructor Standings"
+            "  Constructor Standings",
+            "  Teams & Drivers"
         };
         var detailTabListView = new ListView(hubTabItems)
         {
-            X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill() - 1,
+            X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(),
             Visible = false
         };
         detailTabListView.ColorScheme = listScheme;
         leftPane.Add(detailTabListView);
 
+        var teamDriverListView = new ListView(new List<string>())
+        {
+            X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(),
+            Visible = false
+        };
+        teamDriverListView.ColorScheme = listScheme;
+        leftPane.Add(teamDriverListView);
+
 // Right Pane
         var sessionListView = new ListView(new List<string>())
         {
-            X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill() - 1,
+            X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(),
             Visible = false
         };
         sessionListView.ColorScheme = listScheme;
         rightPane.Add(sessionListView);
 
+        var driversListView = new ListView(new List<string>())
+        {
+            X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(),
+            Visible = false
+        };
+        driversListView.ColorScheme = listScheme;
+        rightPane.Add(driversListView);
+
+        var teamListView = new ListView(new List<string>())
+        {
+            X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(),
+            Visible = false
+        };
+        teamListView.ColorScheme = listScheme;
+        rightPane.Add(teamListView);
+
         // Content View
         var rightContentView = new TextView
         {
-            X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill() - 1,
+            X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(),
             ReadOnly = true, WordWrap = false,
             Visible = false, Text = string.Empty
         };
@@ -271,12 +306,18 @@ public sealed class TerminalApp
         var sessionModels      = new List<F1.Core.Models.Session>();
         var raceRows           = new List<string>();
         var sessionRows        = new List<string>();
+        var teamRows           = new List<string>();
+        var teamModels         = new List<F1.Core.Models.Driver>();
+        var teamDetailDrivers  = new List<F1.Core.Models.Driver>();
         var raceRowsAreData    = false;
         var sessionRowsAreData = false;
+        var teamRowsAreData    = false;
 
         F1.Core.Models.Race?    activeRace    = null;
         F1.Core.Models.Session? activeSession = null;
         var selectedDetailTab = DetailHubTab.SessionInfo;
+        var showTeamsOnRight = false;
+
 
         var contentLines  = new List<string>();
         var contentOffset = 0;
@@ -325,6 +366,7 @@ public sealed class TerminalApp
             DetailHubTab.PitStops             => "[ Pit Stops ]",
             DetailHubTab.DriverStandings      => "[ Driver Standings ]",
             DetailHubTab.ConstructorStandings => "[ Constructor Standings ]",
+            DetailHubTab.TeamsDrivers         => "[ Teams & Drivers ]",
             _                                 => "[ — ]"
         };
 
@@ -365,6 +407,9 @@ public sealed class TerminalApp
                         DetailHubTab.ConstructorStandings => await LoadConstructorStandingsLinesAsync(
                             capturedSeason, capturedRace, capturedSession!, cancellationToken),
 
+                        DetailHubTab.TeamsDrivers => await LoadTeamsDriversLinesAsync(
+                            capturedSeason, capturedRace, cancellationToken),
+
                         _ => ["No content."]
                     };
                 }
@@ -384,6 +429,64 @@ public sealed class TerminalApp
             }, cancellationToken);
         }
 
+        void StartTeamsLoad(int year)
+        {
+            teamRows = ["Loading teams..."];
+            teamRowsAreData = false;
+            teamListView.SetSource(teamRows);
+            teamListView.Visible = true;
+            rightPane.Title = $"[ Teams & Drivers ({year}) ]";
+
+            _ = Task.Run(async () =>
+            {
+                List<string> rows;
+                List<F1.Core.Models.Driver> models;
+                var hasData = false;
+                try
+                {
+                    var races = (await raceService.GetRacesBySeasonAsync(year, cancellationToken)).ToList();
+                    var latestMeeting = races
+                        .Where(r => r.MeetingKey.HasValue)
+                        .OrderByDescending(r => r.RoundNumber)
+                        .FirstOrDefault()?.MeetingKey;
+
+                    models = (await driverService.GetDriversAsync(latestMeeting, cancellationToken))
+                        .Where(d => !string.IsNullOrWhiteSpace(d.TeamName)
+                                    && !string.Equals(d.TeamName, "Unknown Team", StringComparison.OrdinalIgnoreCase))
+                        .GroupBy(d => d.DriverNumber)
+                        .Select(g => g.First())
+                        .OrderBy(d => d.TeamName)
+                        .ThenBy(d => d.DriverNumber)
+                        .ToList();
+
+                    var teams = models
+                        .Select(d => d.TeamName)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(t => t)
+                        .ToList();
+
+                    hasData = teams.Count > 0;
+                    rows = hasData ? teams : ["No team data available."];
+                }
+                catch
+                {
+                    models = [];
+                    rows = ["Error loading teams."];
+                }
+
+                Application.MainLoop?.Invoke(() =>
+                {
+                    teamRowsAreData = hasData;
+                    teamRows = rows;
+                    teamModels = models;
+                    teamListView.SetSource(teamRows);
+                    teamListView.Visible = showTeamsOnRight;
+                    rightPane.Title = $"[ Teams & Drivers ({year}) ]";
+                    Application.Refresh();
+                });
+            }, cancellationToken);
+        }
+
         // Screen Transitions
 
         void GoToSeasonsScreen()
@@ -392,11 +495,16 @@ public sealed class TerminalApp
             seasonListView.Visible    = true;
             raceListView.Visible      = false;
             detailTabListView.Visible = false;
+            teamDriverListView.Visible = false;
             leftPane.Title = "[ Seasons ]";
 
             sessionListView.Visible  = false;
+            driversListView.Visible   = false;
             rightContentView.Visible = false;
-            rightPane.Title = "[ — ]";
+            showTeamsOnRight = true;
+
+            var year = stateStore.Current.SelectedSeason ?? DateTime.UtcNow.Year;
+            StartTeamsLoad(year);
 
             RebuildShortcutBar(SeasonsShortcuts());
             seasonListView.SetFocus();
@@ -408,9 +516,12 @@ public sealed class TerminalApp
             seasonListView.Visible    = false;
             raceListView.Visible      = true;
             detailTabListView.Visible = false;
+            teamDriverListView.Visible = false;
             leftPane.Title = $"[ Races — {season} ]";
 
             sessionListView.Visible  = false;
+            driversListView.Visible = false;
+            teamListView.Visible   = false;
             rightContentView.Visible = false;
             rightPane.Title = "[ Select a Race ]";
 
@@ -435,10 +546,13 @@ public sealed class TerminalApp
             seasonListView.Visible    = false;
             raceListView.Visible      = false;
             detailTabListView.Visible = true;
+            teamDriverListView.Visible = false;
             detailTabListView.SelectedItem = (int)tab;
             leftPane.Title = $"[ {session.SessionName} ]";
 
             sessionListView.Visible  = false;
+            driversListView.Visible = false;
+            teamListView.Visible   = false;
             rightContentView.Visible = true;
 
             RebuildShortcutBar(HubShortcuts());
@@ -450,6 +564,7 @@ public sealed class TerminalApp
             SetPaneRatio(50);
             detailTabListView.Visible = false;
             raceListView.Visible      = true;
+            teamDriverListView.Visible = false;
             leftPane.Title = $"[ Races — {stateStore.Current.SelectedSeason?.ToString() ?? "N/A"} ]";
 
             rightContentView.Visible = false;
@@ -460,77 +575,103 @@ public sealed class TerminalApp
             sessionListView.SetFocus();
         }
 
-        // Seasons Init
-        var currentYear = DateTime.UtcNow.Year;
-        seasons = Enumerable.Range(2023, Math.Max(currentYear - 2023 + 1, 1))
-            .OrderByDescending(y => y)
-            .Select(y => new F1.Core.Models.Season(y))
-            .ToList();
-        seasonListView.SetSource(seasons.Select(s => $"{s.Year} Season").ToList());
-
-        stateStore.Update(state =>
-            AppStateTransitions.ToSeasons(state, null, BuildSeasonsStatusMessage(null)));
-
-        logger.LogInformation(
-            "Initial app state: screen={Screen}, season={Season}",
-            stateStore.Current.ActiveScreen,
-            stateStore.Current.SelectedSeason);
-
-        _ = Task.Run(async () =>
+        void GoToTeamDetailScreen(string teamName, int season)
         {
-            try
+            SetPaneRatio(45);
+            seasonListView.Visible    = false;
+            raceListView.Visible      = false;
+            detailTabListView.Visible = false;
+            teamDriverListView.Visible = true;
+            leftPane.Title = $"[ {teamName} Drivers ]";
+            teamListView.Visible   = false;
+
+            sessionListView.Visible   = false;
+            driversListView.Visible   = false;
+            rightContentView.Visible = true;
+            rightPane.Title = "[ Driver Details ]";
+
+            var teamDrivers = teamModels
+                .Where(d => string.Equals(d.TeamName, teamName, StringComparison.OrdinalIgnoreCase))
+                .GroupBy(d => d.DriverNumber)
+                .Select(g => g.First())
+                .ToList();
+
+            teamDetailDrivers = teamDrivers
+                .OrderBy(d => d.DriverNumber)
+                .ToList();
+
+            var rows = teamDetailDrivers
+                .Select(d => $"{d.NameAcronym,-4}  {d.DriverNumber,3}  {d.FullName}")
+                .ToList();
+
+            teamDriverListView.SetSource(rows);
+            teamDriverListView.SelectedItem = 0;
+            if (teamDetailDrivers.Count > 0)
             {
-                var fetched = await seasonService.GetSeasonsAsync(cancellationToken);
-                if (fetched.Count == 0) return;
-                Application.MainLoop?.Invoke(() =>
-                {
-                    var merged = seasons.Select(s => s.Year)
-                        .Union(fetched.Select(s => s.Year))
-                        .OrderByDescending(y => y)
-                        .Select(y => new F1.Core.Models.Season(y))
-                        .ToList();
-                    var mergedNames  = merged.Select(s => $"{s.Year} Season").ToList();
-                    var currentNames = seasons.Select(s => $"{s.Year} Season").ToList();
-                    if (mergedNames.SequenceEqual(currentNames)) return;
-                    seasons = merged;
-                    seasonListView.SetSource(mergedNames);
-                    
-                });
+                rightContentView.Text = BuildDriverDetailsText(teamDetailDrivers[0]);
             }
-            catch { }
-        }, cancellationToken);
+            else
+            {
+                rightContentView.Text = "No drivers found for this team.";
+            }
 
-        GoToSeasonsScreen();
-        
+            RebuildShortcutBar(TeamDetailShortcuts());
+            teamDriverListView.SetFocus();
+        }
 
-        // Global Quit
+        void ReturnFromTeamDetailToHome()
+        {
+            GoToSeasonsScreen();
+        }
+
         top.KeyPress += args =>
         {
             if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
-            { args.Handled = true; Application.RequestStop(); }
+            {
+                args.Handled = true;
+                Application.RequestStop();
+            }
         };
 
-        // Season List Handlers
-        seasonListView.SelectedItemChanged += args =>
+        void FocusHomeOppositePane()
         {
-            if (args.Item < 0 || args.Item >= seasons.Count) return;
-            var year = seasons[args.Item].Year;
-            stateStore.Update(state => state with
+            if (!seasonListView.Visible || raceListView.Visible || detailTabListView.Visible || teamDriverListView.Visible)
             {
-                SelectedSeason        = year,
-                SelectedRoundNumber   = null,
-                SelectedGrandPrixName = null,
-                SelectedSessionName   = null,
-                ActiveScreen          = "Seasons",
-                StatusMessage         = BuildSeasonsStatusMessage(year)
-            });
-            
-        };
+                return;
+            }
+
+            if (seasonListView.HasFocus)
+            {
+                if (showTeamsOnRight)
+                {
+                    teamListView.SetFocus();
+                }
+                return;
+            }
+
+            if (teamListView.HasFocus)
+            {
+                seasonListView.SetFocus();
+            }
+        }
 
         seasonListView.KeyPress += async args =>
         {
             if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
             { args.Handled = true; Application.RequestStop(); return; }
+
+            if (args.KeyEvent.Key == Key.Tab)
+            {
+                args.Handled = true;
+                if (!showTeamsOnRight)
+                {
+                    showTeamsOnRight = true;
+                    var year = stateStore.Current.SelectedSeason ?? DateTime.UtcNow.Year;
+                    StartTeamsLoad(year);
+                }
+                FocusHomeOppositePane();
+                return;
+            }
 
             if (args.KeyEvent.Key != Key.Enter) return;
             args.Handled = true;
@@ -707,11 +848,80 @@ public sealed class TerminalApp
             }
         };
 
+        teamListView.KeyPress += args =>
+        {
+            if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
+            { args.Handled = true; Application.RequestStop(); return; }
+
+            if (args.KeyEvent.Key == Key.Tab)
+            {
+                args.Handled = true;
+                FocusHomeOppositePane();
+                return;
+            }
+
+            if (args.KeyEvent.Key == Key.Esc)
+            {
+                args.Handled = true;
+                showTeamsOnRight = false;
+                teamListView.Visible = false;
+                sessionListView.Visible = false;
+                rightContentView.Visible = false;
+                rightPane.Title = "[ — ]";
+                RebuildShortcutBar(SeasonsShortcuts());
+                seasonListView.SetFocus();
+                return;
+            }
+
+            if (args.KeyEvent.Key != Key.Enter) return;
+            args.Handled = true;
+
+            if (teamListView.SelectedItem < 0 || teamListView.SelectedItem >= teamRows.Count) return;
+            var selectedTeam = teamRows[teamListView.SelectedItem];
+            var year = stateStore.Current.SelectedSeason ?? DateTime.UtcNow.Year;
+
+            GoToTeamDetailScreen(selectedTeam, year);
+            return;
+        };
+
+        teamDriverListView.SelectedItemChanged += args =>
+        {
+            if (args.Item < 0 || args.Item >= teamDetailDrivers.Count) return;
+            rightContentView.Text = BuildDriverDetailsText(teamDetailDrivers[args.Item]);
+            rightPane.Title = $"[ {teamDetailDrivers[args.Item].FullName} ]";
+        };
+
+        teamDriverListView.KeyPress += args =>
+        {
+            if (args.KeyEvent.Key == Key.Esc)
+            {
+                args.Handled = true;
+                ReturnFromTeamDetailToHome();
+                return;
+            }
+
+            if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
+            {
+                args.Handled = true;
+                Application.RequestStop();
+                return;
+            }
+        };
+
         // Content Scroll
         rightContentView.KeyPress += args =>
         {
             if (ShouldQuit(args.KeyEvent.Key, args.KeyEvent.KeyValue))
-            { args.Handled = true; Application.RequestStop(); return; }
+            {
+                args.Handled = true;
+                if (args.KeyEvent.Key == Key.Esc && teamDriverListView.Visible)
+                {
+                    ReturnFromTeamDetailToHome();
+                    return;
+                }
+                Application.RequestStop();
+                return;
+            }
 
             if (args.KeyEvent.Key == Key.CursorDown)
             { args.Handled = true; contentOffset++; RenderContentViewport(); }
@@ -720,8 +930,41 @@ public sealed class TerminalApp
             { args.Handled = true; contentOffset--; RenderContentViewport(); }
 
             if (args.KeyEvent.Key is Key.Esc or Key.Tab)
-            { args.Handled = true; detailTabListView.SetFocus(); }
+            {
+                args.Handled = true;
+                if (detailTabListView.Visible)
+                {
+                    detailTabListView.SetFocus();
+                }
+                else if (teamDriverListView.Visible)
+                {
+                    ReturnFromTeamDetailToHome();
+                }
+                else if (seasonListView.Visible && teamListView.Visible)
+                {
+                    FocusHomeOppositePane();
+                }
+            }
         };
+
+        // Seasons Init
+        var currentYear = DateTime.UtcNow.Year;
+        seasons = Enumerable.Range(2023, Math.Max(currentYear - 2023 + 1, 1))
+            .OrderByDescending(y => y)
+            .Select(y => new F1.Core.Models.Season(y))
+            .ToList();
+        seasonListView.SetSource(seasons.Select(s => $"{s.Year} Season").ToList());
+        seasonListView.Visible = true;
+
+        stateStore.Update(state =>
+            AppStateTransitions.ToSeasons(state, null, BuildSeasonsStatusMessage(null)));
+
+        logger.LogInformation(
+            "Initial app state: screen={Screen}, season={Season}",
+            stateStore.Current.ActiveScreen,
+            stateStore.Current.SelectedSeason);
+
+        GoToSeasonsScreen();
 
         Application.Run();
         Application.Shutdown();
@@ -778,11 +1021,21 @@ public sealed class TerminalApp
             : SplitLines(BuildConstructorStandingsTableText(season, race, standings));
     }
 
+    private async Task<List<string>> LoadTeamsDriversLinesAsync(
+        int? season, F1.Core.Models.Race? race, CancellationToken ct)
+    {
+        var drivers = await driverService.GetDriversAsync(race?.MeetingKey, ct);
+        return drivers.Count == 0
+            ? ["No driver roster data available."]
+            : SplitLines(BuildTeamsDriversText(season, drivers));
+    }
+
     // Shortcut Definitions
 
     private static IReadOnlyList<(string, string)> SeasonsShortcuts() =>
     [
-        ("Enter", "Select Season"),
+        ("Enter", "Select"),
+        ("Tab",   "Switch Pane"),
         ("Q",     "Quit")
     ];
 
@@ -807,6 +1060,41 @@ public sealed class TerminalApp
         ("Esc",   "Sessions"),
         ("Q",     "Quit")
     ];
+
+    private static IReadOnlyList<(string, string)> TeamDetailShortcuts() =>
+    [
+        ("↑/↓",  "Select Driver"),
+        ("Esc",   "Back"),
+        ("Q",     "Quit")
+    ];
+
+    private static string BuildDriverDetailsText(F1.Core.Models.Driver driver)
+    {
+        var ageText = "N/A";
+        if (driver.DateOfBirth.HasValue)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var age = today.Year - driver.DateOfBirth.Value.Year;
+            if (driver.DateOfBirth.Value.DayOfYear > today.DayOfYear)
+            {
+                age--;
+            }
+            ageText = age.ToString();
+        }
+
+return string.Join(Environment.NewLine,
+        [
+            "Driver Details",
+            "──────────────────────────────────",
+            $"Name:            {driver.FullName}",
+            $"Acronym:         {driver.NameAcronym}",
+            $"Number:          {driver.DriverNumber}",
+            $"Team:            {driver.TeamName}",
+            $"Nationality:     {driver.Nationality}",
+            $"DOB:             {driver.DateOfBirth?.ToString("yyyy-MM-dd") ?? "N/A"}",
+            $"Age:             {ageText}"
+        ]);
+    }
 
     // Status Messages
 
@@ -981,6 +1269,36 @@ public sealed class TerminalApp
         return string.Join(Environment.NewLine,
             new[] { title, divider }
             .Concat(content));
+    }
+
+    private static string BuildTeamsDriversText(
+        int? season, IReadOnlyList<F1.Core.Models.Driver> drivers)
+    {
+        var grouped = drivers
+            .GroupBy(d => d.TeamName)
+            .OrderBy(g => g.Key)
+            .ToList();
+
+        var lines = new List<string>
+        {
+            $"Season: {season?.ToString() ?? "N/A"}",
+            string.Empty
+        };
+
+        foreach (var team in grouped)
+        {
+            var teamColour = team.First().TeamColour;
+            lines.Add($"{team.Key}  #{teamColour}");
+            lines.Add($"  {"#",3}  {"Code",-4}  {"Driver",-24}");
+            lines.Add($"  {"──",3}  {"────",-4}  {"────────────────────────",-24}");
+            foreach (var d in team)
+            {
+                lines.Add($"  {d.DriverNumber,3}  {d.NameAcronym,-4}  {d.FullName,-24}");
+            }
+            lines.Add(string.Empty);
+        }
+
+        return FormatSection("Teams & Drivers", lines);
     }
 
     // Utilities
