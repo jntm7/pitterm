@@ -7,4 +7,7 @@ public sealed record Driver(
     string LastName,
     string NameAcronym,
     string TeamName,
-    string TeamColour);
+    string TeamColour,
+    string Nationality,
+    DateOnly? DateOfBirth,
+    string ProfileUrl);

@@ -16,6 +16,16 @@ public sealed class AppOptionsValidator : IValidateOptions<AppOptions>
             return ValidateOptionsResult.Fail("PitTerm:ApiBaseUrl must be a valid absolute URI.");
         }
 
+        if (string.IsNullOrWhiteSpace(options.DriverProfileApiBaseUrl))
+        {
+            return ValidateOptionsResult.Fail("PitTerm:DriverProfileApiBaseUrl must be provided.");
+        }
+
+        if (!Uri.TryCreate(options.DriverProfileApiBaseUrl, UriKind.Absolute, out _))
+        {
+            return ValidateOptionsResult.Fail("PitTerm:DriverProfileApiBaseUrl must be a valid absolute URI.");
+        }
+
         if (options.RequestTimeoutSeconds <= 0)
         {
             return ValidateOptionsResult.Fail("PitTerm:RequestTimeoutSeconds must be greater than zero.");

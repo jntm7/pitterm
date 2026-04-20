@@ -1,4 +1,5 @@
 using F1.Core.Services;
+using F1.Infrastructure.Jolpica;
 using F1.Infrastructure.OpenF1;
 using F1.Infrastructure.Services;
 using F1Tui.Configuration;
@@ -46,6 +47,12 @@ public static class ServiceCollectionExtensions
         {
             var appOptions = serviceProvider.GetRequiredService<IOptions<AppOptions>>().Value;
             client.BaseAddress = new Uri($"{appOptions.ApiBaseUrl.TrimEnd('/')}/");
+            client.Timeout = TimeSpan.FromSeconds(appOptions.RequestTimeoutSeconds);
+        });
+        services.AddHttpClient<JolpicaClient>((serviceProvider, client) =>
+        {
+            var appOptions = serviceProvider.GetRequiredService<IOptions<AppOptions>>().Value;
+            client.BaseAddress = new Uri($"{appOptions.DriverProfileApiBaseUrl.TrimEnd('/')}/");
             client.Timeout = TimeSpan.FromSeconds(appOptions.RequestTimeoutSeconds);
         });
 
@@ -100,7 +107,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDriverService>(serviceProvider =>
         {
             var openF1Client = serviceProvider.GetRequiredService<IOpenF1Client>();
-            return new DriverService(openF1Client);
+            var jolpicaClient = serviceProvider.GetRequiredService<JolpicaClient>();
+            return new DriverService(openF1Client, jolpicaClient);
         });
         services.AddSingleton<IAppStateStore, InMemoryAppStateStore>();
         services.AddSingleton<TerminalApp>();
