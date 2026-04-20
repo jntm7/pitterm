@@ -33,3 +33,13 @@ Recommended terminals:
 - **macOS**: iTerm2, kitty, alacritty
 - **Linux**: kitty, alacritty, GNOME Terminal
 - **Windows**: Windows Terminal (PowerShell or pwsh)
+
+### Data Sources
+
+#### Historical Session Data
+
+- [OpenF1 API](https://openf1.org/)
+
+#### Driver Profile Info 
+
+- [Jolpica F1 API](https://github.com/jolpica/jolpica-f1/)
